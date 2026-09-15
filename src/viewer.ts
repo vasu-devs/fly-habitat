@@ -53,6 +53,11 @@ export class FlyViewer {
   private brain: Brain;
   private autoplay = false;
   private rafId = 0;
+  private autoOrbit = false;
+  private filterMask: Uint8Array | null = null;   // 1 = shown at full brightness, 0 = dimmed
+  private hemisphereTint = false;
+  private medianX = 0;
+  private container: HTMLElement;
 
   // simple orbit state — drag to rotate, wheel to zoom
   private isDragging = false;
@@ -61,7 +66,7 @@ export class FlyViewer {
   private prev = { x: 0, y: 0 };
   private azimuth = 0;
   private elevation = 0.3;
-  private radius = 800_000; // FAFB14 brain ~700k nm wide
+  private radius = 1_050_000; // fit the whole measured brain in a split pane
 
   // pick / record state
   private raycaster = new THREE.Raycaster();
@@ -74,6 +79,7 @@ export class FlyViewer {
     this.brain = brain;
 
     const { container } = opts;
+    this.container = container;
     const w = container.clientWidth;
     const h = container.clientHeight;
 
@@ -98,6 +104,7 @@ export class FlyViewer {
       np++;
     }
     if (np > 0) { cx /= np; cy /= np; cz /= np; }
+    { const xs = Array.from({ length: N }, (_, i) => brain.neurons.pos[3 * i]).filter(x => x !== 0).sort((a, b) => a - b); this.medianX = xs.length ? xs[xs.length >> 1] : 0; }
     for (let i = 0; i < N; i++) {
       positions[3 * i] = brain.neurons.pos[3 * i] - cx;
       positions[3 * i + 1] = brain.neurons.pos[3 * i + 1] - cy;
@@ -258,6 +265,7 @@ export class FlyViewer {
   private startRenderLoop() {
     const tick = () => {
       this.rafId = requestAnimationFrame(tick);
+      if (this.autoOrbit && !this.isDragging) { this.azimuth += 0.0035; this.updateCameraFromOrbit(); }
       if (this.autoplay && this.snapshots.length > 0) {
         this.currentIdx = (this.currentIdx + 1) % this.snapshots.length;
         this.applySnapshot(this.currentIdx);
@@ -278,6 +286,13 @@ export class FlyViewer {
   }
 
   /** Add one captured snapshot (per-neuron spike rate in [0, 1]). */
+  showLive(rate: Float32Array) {
+    this.autoplay = false;
+    this.snapshots.length = 0;
+    this.snapshots.push(rate);
+    this.applySnapshot(0);
+  }
+
   pushSnapshot(rate: Float32Array) {
     if (rate.length !== this.brain.header.numNeurons) {
       throw new Error(`snapshot length ${rate.length} != neurons ${this.brain.header.numNeurons}`);
@@ -313,17 +328,37 @@ export class FlyViewer {
         mg = 0.10 + u * (0.85 - 0.10);
         mb = 0.40 + u * (0.50 - 0.40);
       }
-      const br = this.baseColors[3 * i];
-      const bg = this.baseColors[3 * i + 1];
-      const bb = this.baseColors[3 * i + 2];
-      colors[3 * i]     = br + t * (mr - br);
-      colors[3 * i + 1] = bg + t * (mg - bg);
-      colors[3 * i + 2] = bb + t * (mb - bb);
+      let br = this.baseColors[3 * i];
+      let bg = this.baseColors[3 * i + 1];
+      let bb = this.baseColors[3 * i + 2];
+      if (this.hemisphereTint) { if (this.brain.neurons.pos[3 * i] > this.medianX) { br *= .5; bg *= .9; bb += .06; } else { br += .05; bg *= .8; bb *= .5; } }
+      const dim = this.filterMask && !this.filterMask[i] ? .12 : 1;
+      colors[3 * i]     = (br + t * (mr - br)) * dim;
+      colors[3 * i + 1] = (bg + t * (mg - bg)) * dim;
+      colors[3 * i + 2] = (bb + t * (mb - bb)) * dim;
     }
     this.colorAttr.needsUpdate = true;
   }
 
   setAutoplay(on: boolean) { this.autoplay = on; }
+
+  // ---- view modes -------------------------------------------------------
+  setAutoOrbit(on: boolean) { this.autoOrbit = on; }
+  /** Camera presets around the centred brain. */
+  setPreset(name: 'front' | 'top' | 'side' | 'iso') {
+    const p = { front: [0, 0.05], top: [0, 1.45], side: [Math.PI / 2, 0.1], iso: [0.6, 0.35] }[name];
+    this.azimuth = p[0]; this.elevation = p[1]; this.updateCameraFromOrbit();
+  }
+  /** Show only the given neuron indices at full brightness (null = all). */
+  setFilter(indices: ArrayLike<number> | null) {
+    if (!indices) { this.filterMask = null; return; }
+    const m = new Uint8Array(this.brain.header.numNeurons);
+    for (let k = 0; k < indices.length; k++) m[indices[k]] = 1;
+    this.filterMask = m;
+  }
+  /** Tint the two hemispheres (cool left, warm right) on top of the class palette. */
+  setHemisphereTint(on: boolean) { this.hemisphereTint = on; }
+  resize() { this.onResize(this.container); }
   get numSnapshots() { return this.snapshots.length; }
   getSnapshot(idx: number): Float32Array | undefined { return this.snapshots[idx]; }
   getSnapshots(): readonly Float32Array[] { return this.snapshots; }

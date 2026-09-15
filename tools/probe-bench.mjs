@@ -1,0 +1,11 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch({ headless: false, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan,WebGPU', '--disable-dawn-features=disallow_unsafe_apis'] });
+const page = await browser.newPage();
+page.on('pageerror', e => console.log('pageerror', e.message));
+page.on('console', m => { if (m.text().includes('[sim]')) console.log(m.text()); });
+await page.goto(process.argv[2] || 'http://127.0.0.1:4173/bench.html');
+const info = await page.evaluate(async () => { const a = await navigator.gpu?.requestAdapter(); const i = a?.info; return { gpu: i ? `${i.vendor} ${i.architecture} ${i.device} ${i.description}` : 'none', maxStorage: a?.limits.maxStorageBuffersPerShaderStage, maxWG: a?.limits.maxComputeInvocationsPerWorkgroup, subgroups: a?.features.has('subgroups') }; });
+console.log('adapter', JSON.stringify(info));
+await page.waitForFunction(() => window.__benchResult, null, { timeout: 400000 });
+console.log(JSON.stringify(await page.evaluate(() => window.__benchResult), null, 1));
+await browser.close();

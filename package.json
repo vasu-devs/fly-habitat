@@ -1,12 +1,12 @@
 {
-  "name": "webgpu-fly",
+  "name": "fly-habitat",
   "version": "0.1.0",
   "description": "Realtime LIF simulation of the FlyWire brain + MANC spine + flybody body, all in WebGPU/WASM in the browser.",
   "type": "module",
-  "homepage": "https://webgpu-fly.pages.dev",
+  "homepage": "https://fly.siddhvasudev.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/abgnydn/webgpu-fly.git"
+    "url": "https://github.com/vasu-devs/fly-habitat.git"
   },
   "author": {
     "name": "Ahmet Barış Günaydın",
@@ -14,7 +14,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node tools/copy-notices.mjs",
     "typecheck": "tsc --noEmit",
     "check:py": "PYTHONDONTWRITEBYTECODE=1 python3 -m compileall -q tools",
     "check:rs": "cargo check --locked --manifest-path tools/cpu-bench/Cargo.toml",
@@ -24,12 +24,14 @@
     "convert": ".venv/bin/python tools/build_csr.py",
     "test:e2e": "playwright test",
     "test:e2e:list": "playwright test --list",
-    "test:unit": "node --test tests-unit/*.test.ts",
+    "test:unit": "node --experimental-strip-types --test --test-concurrency=2 tests-unit/*.test.ts",
     "bench:brain": "playwright test tests/bench.spec.ts --reporter=list",
-    "build:slim": "npm run build && rm -rf dist/flybody dist/flybody.bundle.bin dist/brain.bin dist/brain.meta.json dist/vnc.bin dist/vnc.meta.json dist/walking-policy.bin dist/walking-obs-norm.bin dist/walking-ref.bin dist/walking-policy-fixtures.json",
+    "build:slim": "npm run build && node tools/slim-dist.mjs",
+    "build:vercel": "node tools/fetch-release-assets.mjs && npm run build",
+    "preview:habitat": "node tools/serve-habitat.mjs",
     "deploy": "npm run build:slim && npx --yes wrangler pages deploy dist --project-name=webgpu-fly --branch=main",
     "deploy:hf": "npm run build:slim && cp space/README.md space/.gitattributes NOTICE LICENSE LICENSE-FLYBODY LIMITATIONS.md dist/ && rm -f dist/_headers && hf upload abgunaydin/webgpu-fly dist . --repo-type=space",
-    "deploy:vercel": "npm run build && vercel --prod",
+    "deploy:vercel": "vercel --prod --scope vasu-devs-projects-a637f703",
     "deploy:r2": "bash tools/upload_to_r2.sh"
   },
   "license": "MIT",

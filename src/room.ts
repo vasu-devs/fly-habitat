@@ -90,7 +90,7 @@ export class Room {
   private prev = { x: 0, y: 0 };
   private azimuth = 0.5;
   private elevation = 0.4;
-  private radius = 30;             // wide enough to see fly + target
+  private radius = 3.5;            // close anatomical inspection of the millimetre-scale body
 
   // drive (Phase 2.1 will use this for actuator control)
   private forward = 0;
@@ -98,6 +98,26 @@ export class Room {
 
   /** Frame hook installed by main.ts when the trained walker is active. Returns true when it consumed the physics budget. */
   drivePolicyTick?: () => boolean;
+  /** External neural clock owns physics in the Connectome House lab. */
+  externalClock = false;
+  overview = false;
+  setView(mode: 'follow' | 'overview' | 'macro') {
+    this.overview = mode === 'overview';
+    this.radius = mode === 'overview' ? 37 : mode === 'macro' ? 4.2 : 8;
+    this.elevation = mode === 'overview' ? .95 : .48;
+    this.azimuth = .55;
+  }
+  hideTarget() {
+    if (this.target) this.target.visible = false;
+    if (this.targetGlow) this.targetGlow.visible = false;
+  }
+  advancePhysics(substeps: number) {
+    if (!this.physics) return;
+    this.physics.step(substeps);
+    this.syncBodyTransforms();
+    this.refreshRetina();
+    this.onRetinaUpdate?.();
+  }
 
   constructor(opts: RoomOpts) {
     const { container } = opts;
@@ -414,16 +434,25 @@ export class Room {
         continue; // unsupported types (hfield, sdf) — silently skip
       }
 
-      const r = geomRgba[g * 4], gC = geomRgba[g * 4 + 1], bC = geomRgba[g * 4 + 2], a = geomRgba[g * 4 + 3];
+      // MuJoCo materials carry the anatomical colors (red eyes, amber body,
+      // dark bristles, transparent wings); geom_rgba alone is usually default grey.
+      const matId = m.geom_matid[g];
+      const usesMaterial = matId >= 0 && geomRgba[g*4] === .5 && geomRgba[g*4+1] === .5 && geomRgba[g*4+2] === .5 && geomRgba[g*4+3] === 1;
+      const rgba = usesMaterial ? m.mat_rgba : geomRgba;
+      const colorIndex = (usesMaterial ? matId : g)*4;
+      const r = rgba[colorIndex], gC = rgba[colorIndex+1], bC = rgba[colorIndex+2], a = rgba[colorIndex+3];
       const material = new THREE.MeshStandardMaterial({
         color: new THREE.Color(r, gC, bC),
         transparent: a < 1.0,
         opacity: a,
-        roughness: 0.55,
+        depthWrite: a >= 1,
+        roughness: matId >= 0 ? Math.max(.2, 1-m.mat_shininess[matId]) : .65,
         metalness: 0.1,
       });
 
       const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = geomBodyId[g] > 0 && a >= 1;
+      mesh.receiveShadow = true;
       const v = new THREE.Vector3();
       const q = new THREE.Quaternion();
       swizzlePos(geomPos, g, v);
@@ -515,7 +544,7 @@ export class Room {
     geom.setAttribute("position", new THREE.BufferAttribute(vert, 3));
     geom.setAttribute("normal", new THREE.BufferAttribute(swNormal.length === vNum * 3 && nNum ? swNormal : norm.subarray(0, vNum * 3), 3));
     if (haveUV) geom.setAttribute("uv", new THREE.BufferAttribute(swUV, 2));
-    geom.setIndex(Array.from(face));
+    geom.setIndex(new THREE.BufferAttribute(new Uint32Array(face), 1));
     geom.computeVertexNormals();   // MuJoCo normals can be off; recompute matches zalo.
     return geom;
   }
@@ -540,7 +569,7 @@ export class Room {
     // Orbit around the fly's current world position, not origin —
     // otherwise the body walks out of frame as soon as it moves.
     let cx = 0, cy = 1, cz = 0;
-    if (this.physics) {
+    if (this.physics && !this.overview) {
       const xpos = this.physics.data.xpos as Float64Array;
       // Body 1 is thorax. MJ (x, y, z) → TJ (x, z, -y) after swizzle.
       cx = xpos[3 * 1 + 0] * VISUAL_SCALE;
@@ -643,7 +672,7 @@ export class Room {
         // match native flybody's 500 Hz policy rate. When it returns
         // true, the render-frame's sim budget has already been spent
         // and we skip the trailing step(32).
-        const policyTook = this.drivePolicyTick?.() ?? false;
+        const policyTook = this.externalClock || (this.drivePolicyTick?.() ?? false);
         if (!policyTook) {
           // Brain → VNC stand-in → body. Two motor primitives selected
           // by DN drive: tripod walk gait (amplitude = forward) and

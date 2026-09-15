@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "tag": "models-v1",
+  "baseUrl": "https://github.com/vasu-devs/fly-habitat/releases/download/models-v1",
+  "assets": [
+    {
+      "file": "brain.bin",
+      "bytes": 125749112,
+      "sha256": "6419c41e66e2492567c5d917b8ac4b078af453e08389a567b3a2f8ab8eb10b54"
+    },
+    {
+      "file": "brain.meta.json",
+      "bytes": 3281,
+      "sha256": "bddb3b20a3900262b51959da79337d3cd0f62f1572cb905e36c188b9a7ef0e92"
+    },
+    {
+      "file": "vnc.bin",
+      "bytes": 42783428,
+      "sha256": "32f66b946a16eef564bec8803ba7d4d260d2321f3d873725a929736c86950750"
+    },
+    {
+      "file": "vnc.meta.json",
+      "bytes": 60659,
+      "sha256": "0918ccfa0fa8ec4e1b93ac97e7c697e65551ce58733dc205afdacc2dd7924d2d"
+    },
+    {
+      "file": "flybody.bundle.bin",
+      "bytes": 140279833,
+      "sha256": "f1e9edf29fb767a34f0ad7785dc086803ffe16f275d5b41be9d064c273c60e38"
+    },
+    {
+      "file": "habitat.mjb",
+      "bytes": 78099245,
+      "sha256": "a9c7c0b9e0846e7dcd436c6c1064f41ff06d93e33a6767336972d90bc97f2608"
+    },
+    {
+      "file": "assets.json",
+      "bytes": 174,
+      "sha256": "235fe763345b06f6ad84a9431260acf9e286be336379296acc5a061ae9717262"
+    },
+    {
+      "file": "walking-policy.bin",
+      "bytes": 4796684,
+      "sha256": "b91299ec60bc21d0e004138f17732a838a0bdfdfbabb96953e0b7cb7799bed4b"
+    },
+    {
+      "file": "walking-obs-norm.bin",
+      "bytes": 2296,
+      "sha256": "98a2dc0238acc3ccd0713b84bcfccc44b784cf28bcf1a2601317bf78d6db4ddf"
+    },
+    {
+      "file": "walking-ref.bin",
+      "bytes": 1628,
+      "sha256": "f2e85a51be87db477afce090d9735ce52a24adfeb4637202ac7232f837a54fb6"
+    }
+  ]
+}

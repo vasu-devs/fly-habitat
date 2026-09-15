@@ -1,0 +1,35 @@
+{
+  "source": "https://github.com/abgnydn/webgpu-fly",
+  "assets": [
+    {
+      "file": "brain.bin",
+      "url": "https://pub-ef7218dea0984ac4885f76155c1e058a.r2.dev/brain.bin?v=6419c41e66e2",
+      "bytes": 125749112,
+      "sha256": "6419c41e66e2492567c5d917b8ac4b078af453e08389a567b3a2f8ab8eb10b54"
+    },
+    {
+      "file": "brain.meta.json",
+      "url": "https://pub-ef7218dea0984ac4885f76155c1e058a.r2.dev/brain.meta.json?v=bddb3b20a390",
+      "bytes": 3281,
+      "sha256": "bddb3b20a3900262b51959da79337d3cd0f62f1572cb905e36c188b9a7ef0e92"
+    },
+    {
+      "file": "vnc.bin",
+      "url": "https://pub-ef7218dea0984ac4885f76155c1e058a.r2.dev/vnc.bin?v=32f66b946a16",
+      "bytes": 42783428,
+      "sha256": "32f66b946a16eef564bec8803ba7d4d260d2321f3d873725a929736c86950750"
+    },
+    {
+      "file": "vnc.meta.json",
+      "url": "https://pub-ef7218dea0984ac4885f76155c1e058a.r2.dev/vnc.meta.json?v=0918ccfa0fa8",
+      "bytes": 60659,
+      "sha256": "0918ccfa0fa8ec4e1b93ac97e7c697e65551ce58733dc205afdacc2dd7924d2d"
+    },
+    {
+      "file": "flybody.bundle.bin",
+      "url": "https://pub-ef7218dea0984ac4885f76155c1e058a.r2.dev/flybody.bundle.bin?v=f1e9edf29fb7",
+      "bytes": 140279833,
+      "sha256": "f1e9edf29fb767a34f0ad7785dc086803ffe16f275d5b41be9d064c273c60e38"
+    }
+  ]
+}

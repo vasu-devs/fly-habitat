@@ -13,6 +13,9 @@ export interface FlyMjModel {
   geom_dataid: Int32Array;
   geom_size: Float32Array;
   geom_rgba: Float32Array;
+  geom_matid: Int32Array;
+  mat_rgba: Float32Array;
+  mat_shininess: Float32Array;
   geom_pos: Float32Array;
   geom_quat: Float32Array;
 

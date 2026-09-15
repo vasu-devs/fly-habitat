@@ -126,6 +126,15 @@ export async function getOrFetch(
   url: string,
   onProgress?: (got: number, total: number) => void,
 ): Promise<ArrayBuffer> {
+  // Local files are already on disk. Avoid cloning large buffers into IDB
+  // while WASM and WebGPU are allocating their own copies at startup.
+  if (typeof location !== 'undefined' && ['127.0.0.1', 'localhost'].includes(location.hostname)) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+    const bytes = await response.arrayBuffer();
+    onProgress?.(bytes.byteLength, bytes.byteLength);
+    return bytes;
+  }
   try {
     const hit = await idbGet(key);
     if (hit) return hit.bytes;

@@ -48,10 +48,26 @@ export class Physics {
   /** Root spawn height in world coords. */
   get spawnZ() { return Physics.SPAWN_Z + this.floorZ; }
 
-  static async create(onProgress?: (msg: string) => void): Promise<Physics> {
+  /** @param compiledUrl  optional pre-compiled MJB (tools/compile-habitat.mjs); falls back to compiling the bundle in the browser.
+   *  @param extraWorldXml optional MJCF geoms inserted before </worldbody> in the fallback (the habitat's walls). */
+  static async create(onProgress?: (msg: string) => void, compiledUrl?: string, extraWorldXml?: string): Promise<Physics> {
     const p = new Physics();
     onProgress?.("loading mujoco_wasm");
     p.mujoco = await loadMujoco();
+    let flyText = '';
+    if (compiledUrl) {
+      onProgress?.('Loading compiled anatomical body and habitat…');
+      const response = await fetch(compiledUrl);
+      if (!response.ok) throw new Error(`Body model: HTTP ${response.status}`);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const vfs = new p.mujoco.MjVFS();
+      try {
+        vfs.addBuffer('habitat.mjb', bytes);
+        p.model = p.mujoco.MjModel.from_binary_path('habitat.mjb', vfs);
+      } finally { vfs.delete(); }
+      if (p.model.na !== N_FILTERED_ACTUATORS) throw new Error('Compiled body actuator mismatch');
+      p.data = new p.mujoco.MjData(p.model);
+    } else {
 
     // Use flybody's canonical entry point: build_fruitfly/floor.xml does
     //   <include file="fruitfly.xml"/> + floor plane + grid texture +
@@ -105,8 +121,12 @@ export class Physics {
     if (!floorBytes || !flyBytes) {
       throw new Error("flybody bundle missing floor.xml or fruitfly.xml");
     }
-    const floorText = decoder.decode(floorBytes);
-    const flyText = patchActuatorFilters(decoder.decode(flyBytes));
+    let floorText = decoder.decode(floorBytes);
+    if (extraWorldXml) {
+      if (!floorText.includes('</worldbody>')) throw new Error('floor.xml has no </worldbody> to extend');
+      floorText = floorText.replace('</worldbody>', extraWorldXml + '\n</worldbody>');
+    }
+    flyText = patchActuatorFilters(decoder.decode(flyBytes));
 
     // Mesh refs come from fruitfly.xml; floor.xml only has texture refs.
     const meshFiles = Array.from(
@@ -144,6 +164,7 @@ export class Physics {
     // ~140 MB of OBJ bytes past this point just starves the wasm heap.
     vfs.delete();
     onProgress?.(`MJCF compiled in ${((performance.now() - tCompile) / 1000).toFixed(1)} s`);
+    }
 
     // Initialise to flybody's canonical rest pose, matching native
     // flybody/fruitfly/fruitfly.py:initialize_episode exactly:
@@ -585,6 +606,13 @@ export class Physics {
    * Exposed so that can be measured rather than assumed. */
   static attitudeDamperEnabled = true;
 
+  /** Yaw rate (rad/s) written by the kinematic assist at |turn| = 1. The habitat lowers
+   * it from the upstream 6.0 because long assisted steps with adhering feet can tip the body. */
+  static yawAssist = 6.0;
+  /** When true, the kinematic assist only acts while the thorax is upright (up-vector z > .7),
+   * so a stumbling body is not spun or dragged by velocity writes. Off by default (upstream behaviour). */
+  static assistUprightOnly = false;
+
   /** Step physics N times.
    *
    * Leg and wing actuators, contacts and ground reaction are real
@@ -625,14 +653,14 @@ export class Physics {
         qvel[3] *= 0.85;   // pitch damping
         qvel[4] *= 0.85;   // roll damping
       }
-      if (hasCmd && qpos && qvel && qpos.length >= 7) {
+      if (hasCmd && qpos && qvel && qpos.length >= 7 && (!Physics.assistUprightOnly || 1 - 2 * (qpos[4] * qpos[4] + qpos[5] * qpos[5]) > 0.7)) {
         const qw = qpos[3], qx = qpos[4], qy = qpos[5], qz = qpos[6];
         const fx = 1 - 2 * (qy * qy + qz * qz);
         const fy = 2 * (qx * qy + qw * qz);
         const v = 1.0 * this.fwdCmd;
         qvel[0] = fx * v;
         qvel[1] = fy * v;
-        qvel[5] = this.turnCmd * 6.0;
+        qvel[5] = this.turnCmd * Physics.yawAssist;
       }
       this.mujoco.mj_step(this.model, this.data);
       // Sensor buffering: accumulate readings for averaging in obs.
@@ -691,6 +719,24 @@ export class Physics {
     swingRatio: 0.5,
     liftOffset: 0.5,
   };
+
+  /** Experimental muscle-pool readout. No oscillator or root-velocity writes.
+   * Pool opposition maps to position actuators, with authored gains and adhesion.
+   * This is a testable anatomical mapping, not a calibrated locomotor controller. */
+  driveMotorPools(pools: Record<string, {tibia:number; femur:number; coxa:number; activity:number}>) {
+    this.fwdCmd = 0; this.turnCmd = 0;
+    const ctrl = this.data.ctrl as Float64Array;
+    for (const leg of Physics.LEG_KEYS) {
+      const a = this.legActs[leg], p = pools[leg];
+      if (!a) continue;
+      const strength = p ? Math.min(1, p.activity * 30) : 0;
+      if (a.coxa >= 0) ctrl[a.coxa] = p ? p.coxa * strength * .4 : 0;
+      if (a.femur >= 0) ctrl[a.femur] = p ? p.femur * strength * .4 : 0;
+      if (a.tibia >= 0) ctrl[a.tibia] = p ? p.tibia * strength * .4 : 0;
+      if (a.adhesion >= 0) ctrl[a.adhesion] = .8;
+    }
+    this.driveWings(0, 0);
+  }
 
   driveLegs(walk: number, turn = 0) {
     const ctrl = this.data.ctrl as Float64Array;

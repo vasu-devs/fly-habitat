@@ -72,3 +72,19 @@ snapshots/
 /test-results/
 .env.production
 .claude/
+
+# Compiled habitat model (78 MB, regenerable via tools/compile-habitat.mjs; host it and set VITE_HABITAT_MJB_URL)
+public/habitat.mjb
+.openai/
+
+# Personal credentials, deployment links and temporary release packaging
+.env*
+!.env.example
+.vercel/
+.codex/
+.release/
+.deploy/
+*.pem
+*.key
+*.p12
+*.partial

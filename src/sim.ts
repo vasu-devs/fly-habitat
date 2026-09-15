@@ -5,11 +5,16 @@ import lifWgsl from "./shaders/lif.wgsl?raw";
 import accumWgsl from "./shaders/accumulate.wgsl?raw";
 import type { Brain } from "./brain";
 import { SimParams, DEFAULT_PARAMS, assertValidDt } from "./simParams";
+import { buildSchedule } from "./schedule";
 
 export { DEFAULT_PARAMS, assertValidDt } from "./simParams";
 export type { SimParams } from "./simParams";
 
 const PARAMS_BYTES = 36; // matches struct Params in lif.wgsl (9 × 4 bytes)
+// Cooperative gather geometry; must match WG_SIZE / LANES in lif.wgsl.
+export const LIF_WG_SIZE = 128;
+export const LIF_LANES = 16;
+const LIF_ROWS_PER_WG = LIF_WG_SIZE / LIF_LANES;
 
 export class FlySim {
   readonly device: GPUDevice;
@@ -45,8 +50,12 @@ export class FlySim {
   static async create(brain: Brain, params: SimParams = DEFAULT_PARAMS): Promise<FlySim> {
     assertValidDt(params); // fail fast before touching the GPU or assets
     if (!("gpu" in navigator)) throw new Error("WebGPU not available");
-    const adapter = await navigator.gpu.requestAdapter();
+    // Prefer the discrete GPU on dual-GPU laptops: the gather over 15M edges
+    // is ~20× faster on a dedicated card than on an integrated one.
+    const adapter = (await navigator.gpu.requestAdapter({ powerPreference: "high-performance" })) ?? (await navigator.gpu.requestAdapter());
     if (!adapter) throw new Error("no GPU adapter");
+    const info = adapter.info;
+    if (info) console.info(`[sim] WebGPU adapter: ${info.vendor} ${info.architecture} ${info.device} ${info.description}`.trim());
 
     // Request the adapter's maxes for storage. The LIF kernel binds 10
     // storage buffers (csr×3, spikes×2, vm, refrac, ext, g_x, g_y);
@@ -94,9 +103,10 @@ export class FlySim {
       label: "params",
     });
 
-    this.rowPtrBuf = make(brain.rowPtr, GPUBufferUsage.STORAGE, "row_ptr");
+    // Degree-sorted (neuron, start, end) triples replace row_ptr; see schedule.ts.
+    this.rowPtrBuf = make(buildSchedule(brain.rowPtr), GPUBufferUsage.STORAGE, "rows_sched");
     this.colIdxBuf = make(brain.colIdx, GPUBufferUsage.STORAGE, "col_idx");
-    this.weightBuf = make(brain.weight, GPUBufferUsage.STORAGE, "weight");
+    this.weightBuf = make(brain.weight, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, "weight");
 
     this.spikesA = device.createBuffer({
       size: words * 4,
@@ -145,6 +155,12 @@ export class FlySim {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
       label: "accum",
     });
+  }
+
+  /** Update actual GPU synaptic weights for explicit lesions/plasticity experiments. */
+  replaceWeights(weights: Float32Array) {
+    if (weights.length !== this.brain.header.numEdges) throw new Error('Weight count mismatch');
+    this.device.queue.writeBuffer(this.weightBuf, 0, weights as Float32Array<ArrayBuffer>);
   }
 
   private initPipeline() {
@@ -282,7 +298,7 @@ export class FlySim {
   step(nSteps = 1) {
     const N = this.brain.header.numNeurons;
     const words = (N + 31) >>> 5;
-    const nWg = Math.ceil(N / 64);
+    const nWg = Math.ceil(N / LIF_ROWS_PER_WG);
     const nWgClear = Math.ceil(words / 64);
 
     for (let s = 0; s < nSteps; s++) {
@@ -333,7 +349,8 @@ export class FlySim {
    */
   async captureRollingRate(windowSteps: number): Promise<Float32Array> {
     const N = this.brain.header.numNeurons;
-    const nWg = Math.ceil(N / 64);
+    const nWg = Math.ceil(N / 64);                 // accumulate / clear_accum (64 threads, one neuron each)
+    const nWgLif = Math.ceil(N / LIF_ROWS_PER_WG); // cooperative LIF gather
     const nWgClear = Math.ceil(((N + 31) >>> 5) / 64);
 
     this.writeParams();
@@ -366,7 +383,7 @@ export class FlySim {
       stepPass.setPipeline(this.clearPipeline);
       stepPass.dispatchWorkgroups(nWgClear);
       stepPass.setPipeline(this.pipeline);
-      stepPass.dispatchWorkgroups(nWg);
+      stepPass.dispatchWorkgroups(nWgLif);
       stepPass.end();
 
       const accumPass = enc.beginComputePass();

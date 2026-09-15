@@ -1,6 +1,12 @@
 webgpu-fly
 Copyright 2026 Ahmet Barış Günaydın
 
+Fly Habitat extensions: https://github.com/vasu-devs/fly-habitat
+The habitat, lifecycle and inherited learning, sensory adapters, instrumentation,
+and deployment integration extend the upstream project. Compiled habitat models
+add authored fixtures and actuator filters to flybody; those model modifications
+remain subject to Apache License 2.0. All upstream notices below are preserved.
+
 This product includes software developed by Ahmet Barış Günaydın
 (https://github.com/abgnydn/webgpu-fly), distributed under the MIT
 License (see LICENSE). The browser runtime, the WebGPU LIF kernels

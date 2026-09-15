@@ -1,5 +1,5 @@
 // Playwright config — runs e2e smoke tests against the live dev server
-// at :8766 with WebGPU enabled. WebGPU only works in a real GPU context,
+// at :4173 with WebGPU enabled. WebGPU only works in a real GPU context,
 // so we launch Chromium with the headed flag and the unsafe-webgpu flag
 // (Chromium needs explicit opt-in for WebGPU outside of stable Chrome).
 //
@@ -15,7 +15,7 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: "http://127.0.0.1:8766",
+    baseURL: "http://127.0.0.1:4173",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -36,7 +36,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "npm run dev",
-    url: "http://127.0.0.1:8766",
+    url: "http://127.0.0.1:4173",
     reuseExistingServer: true,
     timeout: 60_000,
   },

@@ -1,0 +1,86 @@
+{
+  "runtime": "MuJoCo 3.8.0 WASM",
+  "bytes": 78099245,
+  "sha256": "a9c7c0b9e0846e7dcd436c6c1064f41ff06d93e33a6767336972d90bc97f2608",
+  "sourceBundleSha256": "f1e9edf29fb767a34f0ad7785dc086803ffe16f275d5b41be9d064c273c60e38",
+  "nq": 109,
+  "nv": 108,
+  "nu": 78,
+  "na": 78,
+  "meshes": 85,
+  "fixtures": [
+    [
+      "back",
+      0,
+      1.18,
+      0.2,
+      1.7,
+      0.04,
+      0.35
+    ],
+    [
+      "front",
+      0,
+      -1.18,
+      0.04,
+      1.7,
+      0.04,
+      0.19
+    ],
+    [
+      "left",
+      -1.7,
+      0,
+      0.2,
+      0.04,
+      1.18,
+      0.35
+    ],
+    [
+      "right",
+      1.7,
+      0,
+      0.2,
+      0.04,
+      1.18,
+      0.35
+    ],
+    [
+      "divider-back",
+      0,
+      1.04,
+      -0.01,
+      0.03,
+      0.1,
+      0.14
+    ],
+    [
+      "divider-front",
+      0,
+      -1.04,
+      -0.01,
+      0.03,
+      0.1,
+      0.14
+    ],
+    [
+      "divider-left",
+      -1.56,
+      0,
+      -0.01,
+      0.1,
+      0.03,
+      0.14
+    ],
+    [
+      "divider-right",
+      1.56,
+      0,
+      -0.01,
+      0.1,
+      0.03,
+      0.14
+    ]
+  ],
+  "note": "Original flybody anatomy; authored miniature habitat and actuator filters."
+}

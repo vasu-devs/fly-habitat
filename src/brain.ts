@@ -89,15 +89,15 @@ export function parseBrain(buf: ArrayBuffer): Brain {
   off += numNeurons * NEURON_BYTES;
 
   // --- CSR row_ptr (N+1 u32) ---
-  const rowPtr = new Uint32Array(buf, off, numNeurons + 1).slice();
+  const rowPtr = new Uint32Array(buf, off, numNeurons + 1);
   off += (numNeurons + 1) * 4;
 
   // --- CSR col_idx (E u32) ---
-  const colIdx = new Uint32Array(buf, off, numEdges).slice();
+  const colIdx = new Uint32Array(buf, off, numEdges);
   off += numEdges * 4;
 
   // --- CSR weight (E f32) ---
-  const weight = new Float32Array(buf, off, numEdges).slice();
+  const weight = new Float32Array(buf, off, numEdges);
   off += numEdges * 4;
 
   if (off !== buf.byteLength) {
