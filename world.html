@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fly Habitat · a living connectome</title><meta name="description" content="A measured FlyWire fruit-fly brain (139,255 neurons) simulated on WebGPU, driving an anatomical body through a habitat where it eats, sleeps, learns, dies and passes its learning on."><meta property="og:title" content="Fly Habitat · a living connectome"><meta property="og:description" content="139,255 measured neurons, one pixel each, steering a real fly body through a house. Runs entirely in your browser on WebGPU."><meta name="theme-color" content="#0b0e11"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%230b0e11%27/%3E%3Ctext x=%275%27 y=%2725%27 font-family=%27Arial Black,Arial,sans-serif%27 font-weight=%27900%27 font-size=%2724%27 fill=%27%23f0b44a%27%3Ef.%3C/text%3E%3C/svg%3E"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="/src/world.css"></head>
-<body>
+<body class="workspace">
 <a class="skip" href="#viewport">Skip to the habitat</a>
 <header class="top">
   <a class="brand" href="/"><span class="brand-mark">f.</span><span class="brand-text">Fly Habitat<small>a living connectome</small></span></a>
@@ -15,9 +15,11 @@
   <button id="about" class="ghost">What is real?</button>
 </header>
 
-<section class="stage">
+<nav class="workspace-nav" aria-label="Workspace sections"><div><a href="#observation" aria-current="location"><span>01</span> Observe</a><a href="#signals"><span>02</span> Signals</a><a href="#instruments"><span>03</span> Experiment</a></div><span class="workspace-note">DROSOPHILA MELANOGASTER <i> / </i> IN BROWSER</span></nav>
+<main>
+<section class="stage" id="observation">
   <section id="viewport" aria-label="Interactive 3D fly habitat">
-    <div class="scene-heading"><span class="eyebrow">Habitat · 3.5 × 2.5 cm</span><h1>The inherited home</h1></div>
+    <div class="scene-heading"><span class="eyebrow">01 / Environment · 3.5 × 2.5 cm</span><h1>The habitat</h1></div>
     <div id="loading"><span class="loader"></span><strong>Opening the habitat</strong><p id="boot">Loading the anatomical model…</p><small>Measured brain wiring · jointed anatomy · WebGPU</small><div class="boot-bar"><i id="boot-bar"></i></div></div>
     <div class="view-controls" aria-label="Camera"><button id="overview" class="active">House</button><button id="follow">Follow</button><button id="macro">Anatomy</button></div>
     <div class="scene-footer"><span>Drag to orbit · scroll to zoom · click a zone to assign it</span><span id="position" class="mono">0.0 / 0.0 mm</span></div>
@@ -38,11 +40,11 @@
       <select id="filter" aria-label="Show one population"><option value="">All populations</option></select>
       <button id="hemi" data-on="false">Hemispheres</button>
     </div>
-    <div class="inspector" id="inspector">
-      <div class="inspector-head"><span class="eyebrow">Selected cell</span><span id="selected-name">Click a neuron</span></div>
+    <details class="inspector" id="inspector">
+      <summary class="inspector-head"><span class="eyebrow">Cell inspector</span><span id="selected-name">Click a neuron</span></summary>
       <p id="selected-detail" class="fine">Pick any point in the brain to read its class, incoming synapses and firing rate.</p>
       <div class="inspector-actions"><button id="pulse-cell" disabled>Pulse 200 ms</button><button id="silence-cell" disabled>Disconnect</button><button id="restore-wiring" class="ghost">Restore wiring</button><div id="top-neurons" class="top-neurons" aria-label="Most active neurons"></div></div>
-    </div>
+    </details>
   </section>
 </section>
 
@@ -57,6 +59,7 @@
   </div>
 </section>
 
+<div class="workspace-section-heading" id="signals"><h2>Neural signals</h2><span>02 / Live activity</span></div>
 <section class="signals">
   <section class="panel strip-panel" aria-label="Live spike raster of named descending neurons and populations">
     <div class="section-label">Spike strip <span>named descending neurons · populations · 240 cycles</span></div>
@@ -70,6 +73,7 @@
   </section>
 </section>
 
+<div class="workspace-section-heading" id="instruments"><h2>Experiment desk</h2><span>03 / Sense, intervene, compare</span></div>
 <section class="instruments">
   <section class="panel conn-panel">
     <div class="section-label">Connectome matrix <span class="mono" id="conn-mode-label">measured wiring</span></div>
@@ -122,6 +126,7 @@
   </section>
 </section>
 
+</main>
 <footer class="transport">
   <button id="play" class="primary" disabled>Start life</button>
   <label>Pace <select id="speed" aria-label="Simulation pace"><option value="1">1×</option><option value="3" selected>3×</option><option value="8">8×</option></select></label>
@@ -139,4 +144,4 @@
 <p><b>Life and inheritance.</b> Hunger, thirst, rest, health, fertility, pollen delivery, eggs and a 240-habitat-second lifespan are simplified rules. On death both learners and the journal are archived and inherited by the next adult (an egg if one exists). Descendants can improve or regress; the lineage panel reports what actually happened.</p>
 <p><b>Interventions.</b> Disconnecting a cell zeroes its incoming and outgoing edges on the GPU; the synaptic-strength slider scales every measured weight. Both persist in the lineage so damaged-brain generations can be compared with intact ones. "Live drive" in the connectome matrix is presynaptic rate × summed weight, an estimate, not a spike-resolved current.</p>
 <p class="fine">Sources: <a href="https://github.com/abgnydn/webgpu-fly" target="_blank" rel="noreferrer">webgpu-fly</a> · <a href="https://github.com/TuragaLab/flybody" target="_blank" rel="noreferrer">flybody</a> · <a href="https://codex.flywire.ai/" target="_blank" rel="noreferrer">FlyWire</a> · <a href="https://github.com/philshiu/Drosophila_brain_model" target="_blank" rel="noreferrer">Shiu et al. model</a>. Everything runs in this tab; no remote inference or hidden training service.</p></dialog>
-<script type="module" src="/src/world.ts"></script></body></html>
+<script type="module" src="/src/workspace-ui.ts"></script><script type="module" src="/src/world.ts"></script></body></html>
