@@ -10,6 +10,9 @@ export interface ViewerOpts {
   pointSize?: number;
   /** Background colour (default near-black). */
   bg?: number;
+  pixelRatio?: number;
+  maxFps?: number;
+  pointOpacity?: number;
 }
 
 // Anatomy palette indexed by super_class enum (matches SUPER_CLASS_TABLE in
@@ -58,6 +61,10 @@ export class FlyViewer {
   private hemisphereTint = false;
   private medianX = 0;
   private container: HTMLElement;
+  private dirty = true;
+  private visible = true;
+  private maxFps = 60;
+  private visibilityObserver: IntersectionObserver;
 
   // simple orbit state — drag to rotate, wheel to zoom
   private isDragging = false;
@@ -84,7 +91,10 @@ export class FlyViewer {
     const h = container.clientHeight;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, opts.pixelRatio ?? 2));
+    this.maxFps = opts.maxFps ?? 60;
+    this.visibilityObserver = new IntersectionObserver(entries => { this.visible = entries[0].isIntersecting; if (this.visible) this.applySnapshot(this.currentIdx); this.dirty = true; });
+    this.visibilityObserver.observe(container);
     this.renderer.setSize(w, h);
     container.appendChild(this.renderer.domElement);
 
@@ -134,7 +144,7 @@ export class FlyViewer {
       size: opts.pointSize ?? 800,
       vertexColors: true,
       transparent: true,
-      opacity: 1.0,
+      opacity: opts.pointOpacity ?? 1.0,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
@@ -148,6 +158,7 @@ export class FlyViewer {
   }
 
   private updateCameraFromOrbit() {
+    this.dirty = true;
     const ce = Math.cos(this.elevation), se = Math.sin(this.elevation);
     const ca = Math.cos(this.azimuth), sa = Math.sin(this.azimuth);
     this.camera.position.set(
@@ -218,6 +229,7 @@ export class FlyViewer {
 
   /** Drop a small marker sphere on the picked neuron. */
   highlightNeuron(idx: number) {
+    this.dirty = true;
     if (idx < 0 || idx >= this.brain.header.numNeurons) return;
     const px = (this.points.geometry.getAttribute("position") as THREE.BufferAttribute).array as Float32Array;
     if (!this.highlightDot) {
@@ -229,7 +241,7 @@ export class FlyViewer {
     this.highlightDot.position.set(px[3 * idx], px[3 * idx + 1], px[3 * idx + 2]);
     this.highlightDot.visible = true;
   }
-  clearHighlight() { if (this.highlightDot) this.highlightDot.visible = false; }
+  clearHighlight() { if (this.highlightDot) this.highlightDot.visible = false; this.dirty = true; }
 
   /** Capture canvas to a webm clip. Returns a stop() that resolves with the blob. */
   startRecording(fps = 30): () => Promise<Blob> {
@@ -255,6 +267,7 @@ export class FlyViewer {
   get isRecording() { return this.mediaRecorder !== null; }
 
   private onResize(container: HTMLElement) {
+    this.dirty = true;
     const w = container.clientWidth;
     const h = container.clientHeight;
     this.camera.aspect = w / h;
@@ -263,20 +276,27 @@ export class FlyViewer {
   }
 
   private startRenderLoop() {
+    let lastDraw = -Infinity;
     const tick = () => {
       this.rafId = requestAnimationFrame(tick);
+      const now = performance.now();
+      if (document.hidden || (!this.visible && !this.isRecording) || now - lastDraw < 1000 / this.maxFps) return;
       if (this.autoOrbit && !this.isDragging) { this.azimuth += 0.0035; this.updateCameraFromOrbit(); }
       if (this.autoplay && this.snapshots.length > 0) {
         this.currentIdx = (this.currentIdx + 1) % this.snapshots.length;
         this.applySnapshot(this.currentIdx);
       }
+      if (!this.dirty && !this.isRecording) return;
       this.renderer.render(this.scene, this.camera);
+      this.dirty = false;
+      lastDraw = now;
     };
     tick();
   }
 
   /** Wipe captured snapshots and reset to anatomy baseline. */
   clearSnapshots() {
+    this.dirty = true;
     this.snapshots.length = 0;
     this.currentIdx = 0;
     this.autoplay = false;
@@ -290,7 +310,7 @@ export class FlyViewer {
     this.autoplay = false;
     this.snapshots.length = 0;
     this.snapshots.push(rate);
-    this.applySnapshot(0);
+    if (this.visible) this.applySnapshot(0);
   }
 
   pushSnapshot(rate: Float32Array) {
@@ -338,6 +358,7 @@ export class FlyViewer {
       colors[3 * i + 2] = (bb + t * (mb - bb)) * dim;
     }
     this.colorAttr.needsUpdate = true;
+    this.dirty = true;
   }
 
   setAutoplay(on: boolean) { this.autoplay = on; }
@@ -351,13 +372,14 @@ export class FlyViewer {
   }
   /** Show only the given neuron indices at full brightness (null = all). */
   setFilter(indices: ArrayLike<number> | null) {
-    if (!indices) { this.filterMask = null; return; }
+    if (!indices) { this.filterMask = null; this.applySnapshot(this.currentIdx); return; }
     const m = new Uint8Array(this.brain.header.numNeurons);
     for (let k = 0; k < indices.length; k++) m[indices[k]] = 1;
     this.filterMask = m;
+    this.applySnapshot(this.currentIdx);
   }
   /** Tint the two hemispheres (cool left, warm right) on top of the class palette. */
-  setHemisphereTint(on: boolean) { this.hemisphereTint = on; }
+  setHemisphereTint(on: boolean) { this.hemisphereTint = on; this.applySnapshot(this.currentIdx); }
   resize() { this.onResize(this.container); }
   get numSnapshots() { return this.snapshots.length; }
   getSnapshot(idx: number): Float32Array | undefined { return this.snapshots[idx]; }
@@ -365,6 +387,7 @@ export class FlyViewer {
   get current() { return this.currentIdx; }
 
   dispose() {
+    this.visibilityObserver.disconnect();
     cancelAnimationFrame(this.rafId);
     this.renderer.dispose();
   }

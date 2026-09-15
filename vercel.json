@@ -48,5 +48,12 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    {
+      "permanent": true,
+      "destination": "/",
+      "source": "/world.html"
+    }
   ]
 }

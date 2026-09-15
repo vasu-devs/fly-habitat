@@ -46,6 +46,7 @@ export class FlySim {
 
   private step_ = 0;
   private prevIsA_ = true;
+  private rollingStages: GPUBuffer[] = [];
 
   static async create(brain: Brain, params: SimParams = DEFAULT_PARAMS): Promise<FlySim> {
     assertValidDt(params); // fail fast before touching the GPU or assets
@@ -69,7 +70,9 @@ export class FlySim {
     const device = await adapter.requestDevice({ requiredLimits: required });
     device.lost.then((info) => console.error(`WebGPU device lost: ${info.reason} — ${info.message}`));
 
-    return new FlySim(device, brain, params);
+    const sim = new FlySim(device, brain, params);
+    await sim.initPipeline();
+    return sim;
   }
 
   private constructor(device: GPUDevice, brain: Brain, params: SimParams) {
@@ -77,7 +80,6 @@ export class FlySim {
     this.brain = brain;
     this.params = params;
     this.initBuffers();
-    this.initPipeline();
   }
 
   private initBuffers() {
@@ -163,7 +165,7 @@ export class FlySim {
     this.device.queue.writeBuffer(this.weightBuf, 0, weights as Float32Array<ArrayBuffer>);
   }
 
-  private initPipeline() {
+  private async initPipeline() {
     const { device } = this;
     const module = device.createShaderModule({ code: lifWgsl, label: "lif" });
 
@@ -184,12 +186,12 @@ export class FlySim {
     });
     const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
 
-    this.pipeline = device.createComputePipeline({
+    this.pipeline = await device.createComputePipelineAsync({
       layout: pipelineLayout,
       compute: { module, entryPoint: "step_lif" },
       label: "lif.step",
     });
-    this.clearPipeline = device.createComputePipeline({
+    this.clearPipeline = await device.createComputePipelineAsync({
       layout: pipelineLayout,
       compute: { module, entryPoint: "clear_spikes" },
       label: "lif.clear",
@@ -226,12 +228,12 @@ export class FlySim {
       ],
     });
     const accumPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [accumLayout] });
-    this.accumPipeline = device.createComputePipeline({
+    this.accumPipeline = await device.createComputePipelineAsync({
       layout: accumPipelineLayout,
       compute: { module: accumModule, entryPoint: "accumulate_spikes" },
       label: "accum.add",
     });
-    this.clearAccumPipeline = device.createComputePipeline({
+    this.clearAccumPipeline = await device.createComputePipelineAsync({
       layout: accumPipelineLayout,
       compute: { module: accumModule, entryPoint: "clear_accum" },
       label: "accum.clear",
@@ -347,15 +349,17 @@ export class FlySim {
    * (clear_spikes, step_lif, accumulate_spikes) × windowSteps → copy accum
    * to staging → submit → mapAsync. One queue submit, one readback.
    */
-  async captureRollingRate(windowSteps: number): Promise<Float32Array> {
+  async captureRollingRate(windowSteps: number, output?: Float32Array): Promise<Float32Array> {
     const N = this.brain.header.numNeurons;
+    if (!Number.isInteger(windowSteps) || windowSteps < 1) throw new Error('windowSteps must be a positive integer');
+    if (output && output.length !== N) throw new Error('Rate output must match neuron count');
     const nWg = Math.ceil(N / 64);                 // accumulate / clear_accum (64 threads, one neuron each)
     const nWgLif = Math.ceil(N / LIF_ROWS_PER_WG); // cooperative LIF gather
     const nWgClear = Math.ceil(((N + 31) >>> 5) / 64);
 
     this.writeParams();
 
-    const stage = this.device.createBuffer({
+    const stage = this.rollingStages.pop() ?? this.device.createBuffer({
       size: N * 4,
       usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
       label: "accum_stage",
@@ -400,13 +404,13 @@ export class FlySim {
     this.device.queue.submit([enc.finish()]);
 
     await stage.mapAsync(GPUMapMode.READ);
-    const counts = new Uint32Array(stage.getMappedRange().slice(0));
-    stage.unmap();
-    stage.destroy();
-
-    const rate = new Float32Array(N);
+    const counts = new Uint32Array(stage.getMappedRange());
+    const rate = output ?? new Float32Array(N);
     const inv = 1 / windowSteps;
     for (let i = 0; i < N; i++) rate[i] = counts[i] * inv;
+    stage.unmap();
+    if (this.rollingStages.length < 2) this.rollingStages.push(stage);
+    else stage.destroy();
     return rate;
   }
 

@@ -41,7 +41,8 @@ The habitat has two online learners: a steering policy over bilateral neural act
 
 | Path | Purpose |
 | --- | --- |
-| `world.html`, `src/world.ts` | Habitat and experiment controls |
+| `index.html`, `src/world.ts` | Direct-entry live habitat and experiment controls |
+| `world.html` | Compatibility redirect for older links |
 | `src/life.ts`, `src/steer.ts`, `src/senses.ts` | Physiology, learning and sensory adapters |
 | `src/sim.ts`, `src/shaders/` | Full-connectome WebGPU simulation |
 | `src/physics.ts`, `src/room.ts`, `src/habitat.ts` | MuJoCo anatomy and Three.js world |

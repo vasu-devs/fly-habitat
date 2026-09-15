@@ -14,10 +14,14 @@
 import * as THREE from "three";
 import { Physics } from "./physics";
 import type { FlyMjModel } from "./mujocoModel";
+import { stepInBatches, yieldToBrowser } from './physicsBatch';
 
 export interface RoomOpts {
   container: HTMLElement;
   bg?: number;
+  pixelRatio?: number;
+  maxFps?: number;
+  floorColor?: number;
 }
 
 const VISUAL_SCALE = 6;          // MJ cm × 6 → TJ units; ~3 cm fly → ~18 TJ
@@ -100,8 +104,15 @@ export class Room {
   drivePolicyTick?: () => boolean;
   /** External neural clock owns physics in the Connectome House lab. */
   externalClock = false;
+  private renderDirty = true;
+  private visible = true;
+  private visibilityObserver?: IntersectionObserver;
+  private maxFps = 60;
+  private floorColor?: number;
+  requestRender() { this.renderDirty = true; }
   overview = false;
   setView(mode: 'follow' | 'overview' | 'macro') {
+    this.renderDirty = true;
     this.overview = mode === 'overview';
     this.radius = mode === 'overview' ? 37 : mode === 'macro' ? 4.2 : 8;
     this.elevation = mode === 'overview' ? .95 : .48;
@@ -115,6 +126,21 @@ export class Room {
     if (!this.physics) return;
     this.physics.step(substeps);
     this.syncBodyTransforms();
+    this.renderDirty = true;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.refreshRetina();
+    this.onRetinaUpdate?.();
+  }
+
+  async advancePhysicsResponsive(substeps: number) {
+    if (!this.physics) return;
+    await stepInBatches(substeps, (count, first) => {
+      this.physics!.step(count, first);
+      this.syncBodyTransforms();
+      this.renderDirty = true;
+    }, yieldToBrowser, 128);
+    // One sensory frame per completed control cycle, independent of display FPS.
+    this.renderer.shadowMap.needsUpdate = true;
     this.refreshRetina();
     this.onRetinaUpdate?.();
   }
@@ -125,7 +151,11 @@ export class Room {
     const h = container.clientHeight;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, opts.pixelRatio ?? 2));
+    this.maxFps = opts.maxFps ?? 60;
+    this.floorColor = opts.floorColor;
+    this.visibilityObserver = new IntersectionObserver(entries => { this.visible = entries[0].isIntersecting; this.renderDirty = true; });
+    this.visibilityObserver.observe(container);
     this.renderer.setSize(w, h);
     this.renderer.setClearColor(opts.bg ?? 0x0a0d12);
     container.appendChild(this.renderer.domElement);
@@ -194,6 +224,8 @@ export class Room {
   async attachPhysics(physics: Physics) {
     this.physics = physics;
     this.buildBodyGraphFromMujoco(physics);
+    this.syncBodyTransforms();
+    this.renderDirty = true;
   }
 
   setDrive(forward: number, turn: number) { this.forward = forward; this.turn = turn; }
@@ -451,6 +483,7 @@ export class Room {
       });
 
       const mesh = new THREE.Mesh(geometry, material);
+      if (geomBodyId[g] === 0 && type === T.mjGEOM_PLANE.value && this.floorColor !== undefined) material.color.setHex(this.floorColor);
       mesh.castShadow = geomBodyId[g] > 0 && a >= 1;
       mesh.receiveShadow = true;
       const v = new THREE.Vector3();
@@ -643,6 +676,7 @@ export class Room {
   }
 
   private onResize(container: HTMLElement) {
+    this.renderDirty = true;
     const w = container.clientWidth;
     const h = container.clientHeight;
     this.camera.aspect = w / h;
@@ -652,8 +686,13 @@ export class Room {
 
   private startLoop() {
     let t0 = performance.now();
+    let lastDraw = -Infinity;
+    let cameraPose = '';
     const tick = () => {
       this.rafId = requestAnimationFrame(tick);
+      if (document.hidden) return;
+      const now = performance.now();
+      if (this.externalClock && (!this.visible || now - lastDraw < 1000 / this.maxFps)) return;
       // Soft pulse on the target — makes it visible from a distance
       // and conveys "I am the thing the fly should look at."
       if (this.target && this.targetGlow) {
@@ -687,17 +726,25 @@ export class Room {
           // per render.
           this.physics.step(32);
         }
-        this.syncBodyTransforms();
-        this.refreshRetina();
-        this.onRetinaUpdate?.();
+        if (!this.externalClock) {
+          this.syncBodyTransforms();
+          this.refreshRetina();
+          this.onRetinaUpdate?.();
+        }
       }
       this.updateCameraFromOrbit();
+      const pose = `${this.azimuth}/${this.elevation}/${this.radius}`;
+      if (this.externalClock && !this.renderDirty && pose === cameraPose) return;
+      cameraPose = pose;
       this.renderer.render(this.scene, this.camera);
+      this.renderDirty = false;
+      lastDraw = now;
     };
     requestAnimationFrame(tick);
   }
 
   dispose() {
+    this.visibilityObserver?.disconnect();
     cancelAnimationFrame(this.rafId);
     this.renderer.dispose();
   }

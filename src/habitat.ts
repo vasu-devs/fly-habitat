@@ -16,29 +16,29 @@ export class Habitat {
   onSelect: ((action: Action)=>void) | null = null;
   constructor(readonly room: Room) {
     this.root.scale.setScalar(6); room.scene.add(this.root);
-    room.scene.background = new T.Color('#c7d2c5');
-    room.scene.fog = new T.Fog('#c7d2c5',50,160);
+    room.scene.background = new T.Color('#000000');
+    room.scene.fog = new T.Fog('#000000',35,90);
     room.renderer.toneMapping=T.ACESFilmicToneMapping;
-    room.renderer.toneMappingExposure=1.2;
+    room.renderer.toneMappingExposure=1.05;
     // One bounded shadow map; the same original anatomical meshes cast it.
-    room.renderer.shadowMap.enabled=true;room.renderer.shadowMap.type=T.PCFSoftShadowMap;
+    room.renderer.shadowMap.autoUpdate=false;room.renderer.shadowMap.needsUpdate=true;room.renderer.shadowMap.enabled=true;room.renderer.shadowMap.type=T.PCFSoftShadowMap;
     const sun=room.scene.children.find(c=>c instanceof T.DirectionalLight) as T.DirectionalLight;
     sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-14;sun.shadow.camera.right=14;sun.shadow.camera.top=14;sun.shadow.camera.bottom=-14;sun.shadow.camera.near=.1;sun.shadow.camera.far=50;sun.shadow.bias=-.0003;sun.shadow.normalBias=.015;
     for(const child of room.scene.children) if(child instanceof T.GridHelper) child.visible=false;
     const mat=(color:T.ColorRepresentation,roughness=.65,metalness=0)=>new T.MeshStandardMaterial({color,roughness,metalness});
-    const stone=mat('#d3cfc0'), wood=mat('#957652'), green=mat('#60735b'), ivory=mat('#eee9db'), metal=mat('#b6c1bc',.22,.65);
+    const stone=mat('#5b6065'), wood=mat('#343a40'), green=mat('#435c53'), ivory=mat('#c5ccc9'), metal=mat('#b6c1bc',.22,.65);
     const mesh=(geo:T.BufferGeometry,material:T.Material,x:number,y:number,z:number,parent:T.Object3D=this.root)=>{
       const m=new T.Mesh(geo,material); m.position.set(x,z,-y);m.castShadow=true;m.receiveShadow=true; parent.add(m); return m;
     };
     const box=(x:number,y:number,z:number,a:number,b:number,c:number,m:T.Material=stone)=>mesh(new T.BoxGeometry(a,c,b),m,x,y,z);
     const cylinder=(x:number,y:number,z:number,r:number,h:number,m:T.Material)=>mesh(new T.CylinderGeometry(r,r,h,40),m,x,y,z);
     // Surrounding countertop and wall make the millimetre-scale arena legible.
-    box(0,0,-.30,6.8,5.4,.25,wood);
+    box(0,0,-.30,3.8,2.75,.25,wood);
     box(0,0,-.19,3.5,2.45,.08,stone);
-    const floors=[['#c9b890',.84,.58],['#91a79b',-.84,.58],['#84907e',-.84,-.58],['#b6bda0',.84,-.58]] as const;
+    const floors=[['#777262',.84,.58],['#48616a',-.84,.58],['#4c5557',-.84,-.58],['#5b6656',.84,-.58]] as const;
     for(const [color,x,y] of floors) box(x,y,-.148,1.65,1.12,.002,mat(color));
-    for(let x=-1.65;x<1.7;x+=.275) box(x,0,-.144,.003,2.25,.002,mat('#899184'));
-    for(let y=-1.1;y<1.2;y+=.275) box(0,y,-.143,3.35,.003,.002,mat('#899184'));
+    for(let x=-1.65;x<1.7;x+=.275) box(x,0,-.144,.003,2.25,.002,mat('#42494c'));
+    for(let y=-1.1;y<1.2;y+=.275) box(0,y,-.143,3.35,.003,.002,mat('#42494c'));
     // Slim posts and a translucent back panel, outside the collision boundary.
     const glass=new T.MeshPhysicalMaterial({color:'#d7f0e7',transparent:true,opacity:.15,roughness:.13,metalness:.1,depthWrite:false,side:T.DoubleSide});
     box(0,1.23,.42,3.52,.018,1.2,glass);

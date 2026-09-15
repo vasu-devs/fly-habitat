@@ -57,9 +57,12 @@ export class Physics {
     let flyText = '';
     if (compiledUrl) {
       onProgress?.('Loading compiled anatomical body and habitat…');
-      const response = await fetch(compiledUrl);
-      if (!response.ok) throw new Error(`Body model: HTTP ${response.status}`);
-      const bytes = new Uint8Array(await response.arrayBuffer());
+      // Cache only explicitly versioned models; unversioned custom URLs must revalidate.
+      const versioned = new URL(compiledUrl, location.href).searchParams.has('v');
+      const buffer = versioned
+        ? await getOrFetch(compiledUrl, compiledUrl, (got, total) => onProgress?.(`Loading anatomical body · ${progressText(got, total)}`))
+        : await fetch(compiledUrl).then(r => { if (!r.ok) throw Error(`Body model: HTTP ${r.status}`); return r.arrayBuffer(); });
+      const bytes = new Uint8Array(buffer);
       const vfs = new p.mujoco.MjVFS();
       try {
         vfs.addBuffer('habitat.mjb', bytes);
@@ -633,22 +636,24 @@ export class Physics {
    *    are written from fwdCmd/turnCmd, so body motion is an algebraic
    *    function of the drive scalars rather than of ground reaction.
    *    See kinematicAssistEnabled for the measured size of this. */
-  step(substeps = 1) {
+  step(substeps = 1, resetSensors = true) {
     const assist = Physics.kinematicAssistEnabled;
     const hasCmd = assist && (Math.abs(this.fwdCmd) > 0.01 || Math.abs(this.turnCmd) > 0.01);
     // Reset sensor accumulators — this step's substeps fill them; the
     // next buildWalkingObservation reads the mean.
-    this.sensorBuf.accel.fill(0);
-    this.sensorBuf.gyro.fill(0);
-    this.sensorBuf.vel.fill(0);
-    this.sensorBuf.forces.fill(0);
-    this.sensorBuf.touches.fill(0);
-    this.sensorBuf.count = 0;
+    if (resetSensors) {
+      this.sensorBuf.accel.fill(0);
+      this.sensorBuf.gyro.fill(0);
+      this.sensorBuf.vel.fill(0);
+      this.sensorBuf.forces.fill(0);
+      this.sensorBuf.touches.fill(0);
+      this.sensorBuf.count = 0;
+    }
     const sensordata = this.data.sensordata as Float32Array;
     const sIdx = this.sensorIdx;
+    const qpos = this.data.qpos as Float64Array;
+    const qvel = this.data.qvel as Float64Array;
     for (let s = 0; s < substeps; s++) {
-      const qpos = this.data.qpos as Float64Array;
-      const qvel = this.data.qvel as Float64Array;
       if (Physics.attitudeDamperEnabled && qvel && qvel.length >= 6) {
         qvel[3] *= 0.85;   // pitch damping
         qvel[4] *= 0.85;   // roll damping

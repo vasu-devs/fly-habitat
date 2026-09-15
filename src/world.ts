@@ -17,11 +17,12 @@ import { Plasticity } from './plasticity';
 import { Life, PLACES, ACTIONS, READOUT_POPULATIONS, type Action } from './life';
 import { buildPopulations, smell, see, encode, populationRates, lateralFeatures, mean, isLeftOf, STEER_FEATURE_NAMES, POPULATIONS, LATERAL, ODOR_CHANNELS, type Populations, type OdorSource, type Smell } from './senses';
 import { loadManifest } from './manifest';
+import releaseAssets from '../release-assets.json';
 import { habitatFixturesXml } from './habitatFixtures';
 import { buildPixelOrder, classify, connectivity, drive, paintNeuronMatrix, MATRIX_LABELS, K, type PixelLayout, type Connectivity } from './matrix';
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const text = (id: string, value: string) => { el(id).textContent = value; };
+const text = (id: string, value: string) => { const node = el(id); if (node.textContent !== value) node.textContent = value; };
 const button = (id: string) => el<HTMLButtonElement>(id);
 const input = (id: string) => el<HTMLInputElement>(id);
 const select = (id: string) => el<HTMLSelectElement>(id);
@@ -30,6 +31,16 @@ const dialog = el<HTMLDialogElement>('model');
 button('about').onclick = () => dialog.showModal(); button('close-about').onclick = () => dialog.close();
 
 const SAVE = 'fly-habitat-lineage-v1';
+const benchmark = new URLSearchParams(location.search).has('benchmark');
+const timingSamples: { cycle: number; brain: number; body: number }[] = [];
+const visiblePanels = new Set<Element>();
+const panelObserver = new IntersectionObserver(entries => {
+  for (const entry of entries) { if (entry.isIntersecting) visiblePanels.add(entry.target); else visiblePanels.delete(entry.target); }
+  if (ready) refreshInstruments();
+});
+for (const panel of document.querySelectorAll('.panel')) panelObserver.observe(panel);
+const panelVisible = (id: string) => visiblePanels.has(el(id).closest('.panel')!);
+let lastInstruments = 0;
 const ODOR_DECAY = .6;            // per cm; a plume at 1 cm is 55 % of its source strength, 22 % at 2.5 cm
 const HABITAT_DT = .08;           // habitat seconds per pace unit per cycle (16 ms of physics): 240-s lifespan ≈ 48 s of body time
 const STUCK_WINDOW = 20;          // cycles of no displacement that trigger the escape reflex
@@ -88,6 +99,7 @@ function tweenActivity(target: number) {
 }
 function bootBar(fraction: number) { el('boot-bar').style.width = `${Math.round(clamp(fraction, 0, 1) * 100)}%`; }
 function save() {
+  if (benchmark) return;
   try {
     localStorage.setItem(SAVE, JSON.stringify({ life: life.checkpoint(), pose: body ? Array.from(body.data.qpos as Float64Array) : undefined }));
     text('save-state', `Saved locally · ${life.updates + life.steering.updates} updates`);
@@ -243,6 +255,13 @@ function drawEye() {
   if (smelled) for (let c = 0; c < ODOR_CHANNELS; c++) { const row = el(`sniff-${c}`); (row.querySelector('.left i') as HTMLElement).style.width = `${clamp(smelled.left[c], 0, 1) * 100}%`; (row.querySelector('.right i') as HTMLElement).style.width = `${clamp(smelled.right[c], 0, 1) * 100}%`; }
 }
 
+function refreshInstruments() {
+  if (panelVisible('neuron-matrix')) { paintNeuronMatrix(matrixImage.data, rates, layout); el<HTMLCanvasElement>('neuron-matrix').getContext('2d')!.putImageData(matrixImage, 0, 0); }
+  if (panelVisible('conn-matrix')) drawConn();
+  if (panelVisible('eye')) drawEye();
+  if (panelVisible('strip')) drawStrip();
+}
+
 // ---------- UI: per-cycle render ----------
 function render() {
   const s = life.state;
@@ -289,18 +308,19 @@ function render() {
     text('comparison', t ? `Early third → latest third of ${t.lifetimes} lifetimes: reward ${t.early.reward.toFixed(1)} → ${t.late.reward.toFixed(1)}, deliveries ${t.early.tasks.toFixed(1)} → ${t.late.tasks.toFixed(1)}, age ${t.early.age.toFixed(0)} → ${t.late.age.toFixed(0)} s. Conditions may differ between lifetimes; this is a measured outcome, not a controlled benchmark.` : 'At least two completed lifetimes are needed to compare outcomes.');
     drawLineage(); lastLifetimeCount = life.lifetimes.length;
   }
-  drawStrip();
-  if (body) { const q = body.data.qpos as Float64Array; text('position', `${(q[0] * 10).toFixed(1)} / ${(q[1] * 10).toFixed(1)} mm`); habitat.update(life, q[0], q[1], input('heat').checked, input('food').checked); }
+  if (panelVisible('strip')) drawStrip();
+  if (body) { const q = body.data.qpos as Float64Array; text('position', `${(q[0] * 10).toFixed(1)} / ${(q[1] * 10).toFixed(1)} mm`); habitat.update(life, q[0], q[1], input('heat').checked, input('food').checked); room.requestRender(); }
 }
 
 // ---------- the control cycle ----------
 async function cycle() {
+  const cycleStart = performance.now();
   const pace = Number(select('speed').value);
   const window_ = Number(select('window').value);
   if (pendingWiring) { pendingWiring = false; applyWiring(); }
   const q = body.data.qpos as Float64Array;
   if (!life.state.alive) {
-    body.driveLegs(0, 0); room.advancePhysics(80); physicsSeconds += .008;
+    body.driveLegs(0, 0); await room.advancePhysicsResponsive(80); physicsSeconds += .008;
     life.step(HABITAT_DT, q[0], q[1], false);
     if (life.state.deathAge >= 2) { life.hatch(); body.reset(); sim.reset(); lastDecision = -100; arrivedFor = 0; prevDistance = NaN; trail.length = 0; escape = null; save(); }
     render(); return;
@@ -319,7 +339,7 @@ async function cycle() {
   sim.setExternalInput(ext);
   // 2. the measured brain
   const t0 = performance.now();
-  rates = await sim.captureRollingRate(window_); neuralMs += window_;
+  rates = await sim.captureRollingRate(window_, rates); neuralMs += window_;
   brainMs = performance.now() - t0;
   active = 0; for (const r of rates) if (r > 0) active++;
   const neuralActive = active > 0;
@@ -370,7 +390,7 @@ async function cycle() {
   const forward = arrived ? 0 : forwardOverride ?? neuralDrive * .9 * (1 - .6 * Math.abs(turn));
   body.driveLegs(forward, turn);
   // 5. body
-  const t1 = performance.now(); room.advancePhysics(160 * pace); physicsSeconds += .016 * pace; bodyMs = performance.now() - t1;
+  const t1 = performance.now(); await room.advancePhysicsResponsive(160 * pace); physicsSeconds += .016 * pace; bodyMs = performance.now() - t1;
   // Righting reflex: flies right themselves within a fraction of a second. If the thorax's up
   // vector points down for several cycles, restore an upright pose at the same place and heading.
   const up = 1 - 2 * (qx * qx + qy * qy);
@@ -392,13 +412,14 @@ async function cycle() {
   debug = { cycle: cycles, x: q[0], y: q[1], heading: Math.atan2(hy, hx), goal: life.state.action, angle, distance, goalSignal, trend: goalTrend, up, falls, asym: lateral[6], policyTurn, turn, forward, stuck: escape ? `${escape.phase[0]}${escape.left}` : 0, goalL: place.channel >= 0 ? mean(rates, pops.odorLeft[place.channel]) * 1000 : 0, goalR: place.channel >= 0 ? mean(rates, pops.odorRight[place.channel]) * 1000 : 0, ornL: mean(rates, pops.left.ORN) * 1000, ornR: mean(rates, pops.right.ORN) * 1000, speed: room.bodySpeed() };
   // 7. instruments
   viewer.showLive(rates);
-  paintNeuronMatrix(matrixImage.data, rates, layout); el<HTMLCanvasElement>('neuron-matrix').getContext('2d')!.putImageData(matrixImage, 0, 0);
-  if (connMode === 'drive' || cycles % 40 === 0) drawConn();
-  drawEye();
+  if (performance.now() - lastInstruments >= 200) {
+    refreshInstruments();
+    lastInstruments = performance.now();
+  }
   strip.push(stripRows.map(r => mean(rates, r.ids))); if (strip.length > STRIP_COLS) strip.shift();
   cycles++; cycleMs = performance.now() - t0;
   if (selected >= 0) selectNeuron(selected);
-  if (cycles % 3 === 0) {
+  if (cycles % 3 === 0 && el<HTMLDetailsElement>('inspector').open) {
     const top: number[] = [];
     for (let i = 0; i < rates.length; i++) if (rates[i] > 0 && (top.length < 6 || rates[i] > rates[top[top.length - 1]])) { top.push(i); top.sort((a, b) => rates[b] - rates[a]); if (top.length > 6) top.length = 6; }
     const host = el('top-neurons'); host.replaceChildren();
@@ -406,6 +427,15 @@ async function cycle() {
   }
   if (life.totalSeconds - lastSave > 2 || !life.state.alive) { save(); lastSave = life.totalSeconds; }
   render();
+  if (cycles > 5) {
+    timingSamples.push({ cycle: performance.now() - cycleStart, brain: brainMs, body: bodyMs });
+    if (timingSamples.length > 30) timingSamples.shift();
+    const avg = (key: 'cycle' | 'brain' | 'body') => timingSamples.reduce((sum, s) => sum + s[key], 0) / timingSamples.length;
+    const metrics = { samples: timingSamples.length, cycleMs: avg('cycle'), brainMs: avg('brain'), bodyMs: avg('body'), pace, window: window_ };
+    el('clock-cycle').dataset.performance = JSON.stringify(metrics);
+    el('clock-cycle').title = `${metrics.cycleMs.toFixed(0)} ms average over ${metrics.samples} cycles`;
+    if (benchmark && timingSamples.length === 30) { setRunning(false); text('status', 'Benchmark complete'); }
+  }
 }
 async function loop() {
   if (running && !busy && !document.hidden) { busy = true; try { await cycle(); } catch (error) { stop(error); } finally { busy = false; } }
@@ -416,7 +446,7 @@ async function loop() {
 async function boot() {
   if (!navigator.gpu) throw Error('This habitat needs WebGPU. Use a current Chrome or Edge with hardware acceleration enabled.');
   try {
-    const saved = localStorage.getItem(SAVE);
+    const saved = benchmark ? null : localStorage.getItem(SAVE);
     if (saved) { const c = JSON.parse(saved); life.restore(c.life); if (Array.isArray(c.pose) && c.pose.length === 109 && c.pose.every(Number.isFinite)) pose = c.pose; life.remember('Resumed saved lineage'); }
   } catch (error) { text('save-state', `Saved checkpoint could not be read: ${error instanceof Error ? error.message : String(error)}`); }
   Physics.kinematicAssistEnabled = true; Physics.attitudeDamperEnabled = true; Physics.yawAssist = 4; Physics.assistUprightOnly = true;
@@ -431,14 +461,18 @@ async function boot() {
   let brainBytes = 0;
   const brainPromise = loadBrain(brainUrl, (n, total) => { brainBytes = n; bootBar(.15 + .6 * (total ? n / total : 0)); });
   brainPromise.catch(() => {});
-  const mjbUrl = env.VITE_HABITAT_MJB_URL || '/habitat.mjb';
+  const bodyVersion = releaseAssets.assets.find(asset => asset.file === 'habitat.mjb')!.sha256.slice(0, 12);
+  const mjbUrl = env.VITE_HABITAT_MJB_URL || `/habitat.mjb?v=${bodyVersion}`;
   const hasMjb = await fetch(mjbUrl, { method: 'HEAD' }).then(r => r.ok && !(r.headers.get('content-type') || '').includes('text/html')).catch(() => false);
   if (!hasMjb) progress('No compiled habitat model here: compiling the anatomical body with the habitat walls in this tab (slower first load)…');
   body = await Physics.create(m => progress(brainBytes ? `${m} · brain ${(brainBytes / 1e6).toFixed(0)} MB` : m), hasMjb ? mjbUrl : undefined, hasMjb ? undefined : habitatFixturesXml());
   bootBar(.15);
   if (pose) { (body.data.qpos as Float64Array).set(pose); body.mujoco.mj_forward(body.model, body.data); }
-  room = new Room({ container: el('viewport'), bg: 0xc7d2c5 }); room.externalClock = true;
-  await room.attachPhysics(body); room.hideTarget(); habitat = new Habitat(room); setCamera('overview');
+  room = new Room({ container: el('viewport'), bg: 0x000000, floorColor: 0x16181b, pixelRatio: 1.25, maxFps: 24 }); room.externalClock = true;
+  await room.attachPhysics(body); room.hideTarget(); habitat = new Habitat(room); setCamera(benchmark ? 'overview' : 'follow');
+  room.advancePhysics(0);
+  el('loading').classList.add('anatomy-ready');
+  el('loading').querySelector('strong')!.textContent = 'Connecting the measured brain';
   progress('Anatomy ready. Reading 139,255 measured neurons…');
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   meta = await fetch(metaUrl).then(r => { if (!r.ok) throw Error('brain.meta.json missing'); return r.json(); });
@@ -452,7 +486,7 @@ async function boot() {
   pops = buildPopulations(brain); plasticity = new Plasticity(brain);
   rates = new Float32Array(brain.header.numNeurons); ext = new Float32Array(rates.length);
   progress('Building the 3D brain map…');
-  viewer = new FlyViewer(brain, { container: el('brain-view'), pointSize: 1400 });
+  viewer = new FlyViewer(brain, { container: el('brain-view'), pointSize: 850, pointOpacity: .55, bg: 0x000000, pixelRatio: 1.25, maxFps: 30 });
   viewer.onPick(i => selectNeuron(i)); viewer.setPreset('iso');
   progress('Summing 15,091,983 measured edges into the connectome matrix…');
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
