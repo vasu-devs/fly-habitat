@@ -1,5 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
-/* Tokens. One accent (amber, the spike colour). Greys are cool-tinted, never pure black. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* Base instrument styles; workspace.css defines the habitat layout and palette. */
 :root{
   --ink:#0b0e11;--ink-2:#0e1216;--panel:#11161b;--line:#1f2830;--line-2:#2b3640;
   --text:#e4e8e2;--muted:#8b98a4;--dim:#5b6874;

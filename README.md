@@ -2,7 +2,7 @@
 
 A fruit-fly connectome experiment in a 3D home: measured FlyWire wiring simulated on WebGPU, an anatomical flybody running in MuJoCo, learned steering and goal selection, and a lineage that carries learning across lifetimes.
 
-**[Open the habitat](https://fly.siddhvasudev.com/world.html)** · **[Website](https://fly.siddhvasudev.com)** · **[Model and controls](HABITAT.md)** · **[Circuit laboratory](CONNECTOME-HOUSE.md)**
+**[Open the habitat](https://fly.siddhvasudev.com/)** · **[Website](https://fly.siddhvasudev.com)** · **[Model and controls](HABITAT.md)** · **[Circuit laboratory](CONNECTOME-HOUSE.md)**
 
 ## Explore
 
@@ -45,7 +45,8 @@ The habitat has two online learners: a steering policy over bilateral neural act
 | `world.html` | Compatibility redirect for older links |
 | `src/life.ts`, `src/steer.ts`, `src/senses.ts` | Physiology, learning and sensory adapters |
 | `src/sim.ts`, `src/shaders/` | Full-connectome WebGPU simulation |
-| `src/physics.ts`, `src/room.ts`, `src/habitat.ts` | MuJoCo anatomy and Three.js world |
+| `src/physics.ts`, `src/body.worker.ts`, `src/bodyClient.ts` | MuJoCo anatomy, worker computation and pose snapshots |
+| `src/room.ts`, `src/habitat.ts` | Three.js anatomy and habitat rendering |
 | `lab.html` | Circuit experiments and MANC nerve-cord bridge |
 | `tests-unit/`, `tests/` | Software validation |
 | `legacy/fly-house/` | Preserved early artificial-agent prototype; not deployed |

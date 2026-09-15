@@ -19,14 +19,15 @@ export class Habitat {
     room.scene.background = new T.Color('#000000');
     room.scene.fog = new T.Fog('#000000',35,90);
     room.renderer.toneMapping=T.ACESFilmicToneMapping;
-    room.renderer.toneMappingExposure=1.05;
+    room.renderer.toneMappingExposure=1.1;
     // One bounded shadow map; the same original anatomical meshes cast it.
-    room.renderer.shadowMap.autoUpdate=false;room.renderer.shadowMap.needsUpdate=true;room.renderer.shadowMap.enabled=true;room.renderer.shadowMap.type=T.PCFSoftShadowMap;
+    room.renderer.shadowMap.autoUpdate=false;room.renderer.shadowMap.needsUpdate=true;room.renderer.shadowMap.enabled=true;room.renderer.shadowMap.type=T.PCFShadowMap;
     const sun=room.scene.children.find(c=>c instanceof T.DirectionalLight) as T.DirectionalLight;
+    sun.color.set('#eef3fa');sun.intensity=1.35;
     sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-14;sun.shadow.camera.right=14;sun.shadow.camera.top=14;sun.shadow.camera.bottom=-14;sun.shadow.camera.near=.1;sun.shadow.camera.far=50;sun.shadow.bias=-.0003;sun.shadow.normalBias=.015;
     for(const child of room.scene.children) if(child instanceof T.GridHelper) child.visible=false;
     const mat=(color:T.ColorRepresentation,roughness=.65,metalness=0)=>new T.MeshStandardMaterial({color,roughness,metalness});
-    const stone=mat('#5b6065'), wood=mat('#343a40'), green=mat('#435c53'), ivory=mat('#c5ccc9'), metal=mat('#b6c1bc',.22,.65);
+    const stone=mat('#252d35'), wood=mat('#20262e'), green=mat('#354b48'), ivory=mat('#aab6bd'), metal=mat('#b6c1bc',.22,.65);
     const mesh=(geo:T.BufferGeometry,material:T.Material,x:number,y:number,z:number,parent:T.Object3D=this.root)=>{
       const m=new T.Mesh(geo,material); m.position.set(x,z,-y);m.castShadow=true;m.receiveShadow=true; parent.add(m); return m;
     };
@@ -35,10 +36,10 @@ export class Habitat {
     // Surrounding countertop and wall make the millimetre-scale arena legible.
     box(0,0,-.30,3.8,2.75,.25,wood);
     box(0,0,-.19,3.5,2.45,.08,stone);
-    const floors=[['#777262',.84,.58],['#48616a',-.84,.58],['#4c5557',-.84,-.58],['#5b6656',.84,-.58]] as const;
+    const floors=[['#343b41',.84,.58],['#2c3941',-.84,.58],['#292e35',-.84,-.58],['#303934',.84,-.58]] as const;
     for(const [color,x,y] of floors) box(x,y,-.148,1.65,1.12,.002,mat(color));
-    for(let x=-1.65;x<1.7;x+=.275) box(x,0,-.144,.003,2.25,.002,mat('#42494c'));
-    for(let y=-1.1;y<1.2;y+=.275) box(0,y,-.143,3.35,.003,.002,mat('#42494c'));
+    for(let x=-1.65;x<1.7;x+=.275) box(x,0,-.144,.003,2.25,.002,mat('#242b30'));
+    for(let y=-1.1;y<1.2;y+=.275) box(0,y,-.143,3.35,.003,.002,mat('#242b30'));
     // Slim posts and a translucent back panel, outside the collision boundary.
     const glass=new T.MeshPhysicalMaterial({color:'#d7f0e7',transparent:true,opacity:.15,roughness:.13,metalness:.1,depthWrite:false,side:T.DoubleSide});
     box(0,1.23,.42,3.52,.018,1.2,glass);
@@ -46,7 +47,7 @@ export class Habitat {
     // Kitchen counter behind the reachable fruit patch.
     box(1.03,1.02,.03,.85,.20,.34,wood);
     box(1.03,1.02,.22,.94,.24,.04,ivory);
-    for(const x of [.79,1.05,1.28]) box(x,.912,.04,.20,.008,.27,mat('#b89b72'));
+    for(const x of [.79,1.05,1.28]) box(x,.912,.04,.20,.008,.27,mat('#4b575e'));
     cylinder(.87,.63,-.132,.24,.022,ivory);
     this.root.add(this.food);
     const fruitMat=mat('#d99d39',.45);
@@ -63,10 +64,10 @@ export class Habitat {
     const faucet=mesh(new T.TorusGeometry(.10,.013,10,24,Math.PI),metal,-1.18,1,.31);
     faucet.rotation.z=0;
     // Refuge has a fabric floor and a canopy with a clear entrance.
-    box(-.91,-.66,-.13,.57,.57,.028,mat('#776c5b'));
+    box(-.91,-.66,-.13,.57,.57,.028,mat('#464b50'));
     for(const x of [-1.24,-.57]) box(x,-.87,.04,.03,.04,.38,wood);
     box(-.91,-.94,.035,.7,.025,.36,wood);
-    box(-.91,-.71,.255,.75,.66,.035,mat('#8a735b'));
+    box(-.91,-.71,.255,.75,.66,.035,mat('#42494f'));
     const pillow=mesh(new T.SphereGeometry(.10,24,16),mat('#b6af93'),-1.05,-.88,-.09); pillow.scale.set(1,.25,.7);
     // Flower cluster. Each stalk and petal is 3D, with no billboard replacement.
     for(let i=0;i<5;i++) {
@@ -84,7 +85,7 @@ export class Habitat {
       marker.rotation.x=-Math.PI/2; this.markers.set(p.id,marker);
       const label=this.label(p.name.toUpperCase(),colors[i]);label.position.set(p.x,-.02,-p.y-.31);this.root.add(label);this.labels.push(label);
     });
-    this.ring=mesh(new T.RingGeometry(.17,.184,48),new T.MeshBasicMaterial({color:'#f8efc5',side:T.DoubleSide,transparent:true,opacity:.85}),0,0,-.137);this.ring.rotation.x=-Math.PI/2;
+    this.ring=mesh(new T.RingGeometry(.17,.174,48),new T.MeshBasicMaterial({color:'#f8efc5',side:T.DoubleSide,transparent:true,opacity:.85}),0,0,-.137);this.ring.rotation.x=-Math.PI/2;
     this.heat=box(.9,.62,-.136,.68,.64,.005,new T.MeshBasicMaterial({color:'#ee633b',transparent:true,opacity:.28}));this.heat.visible=false;
     this.trail=new T.Line(new T.BufferGeometry(),new T.LineBasicMaterial({color:'#d9b96c',transparent:true,opacity:.55}));this.root.add(this.trail);
     // A visual scale bar, exactly one millimetre in model units.
@@ -105,6 +106,11 @@ export class Habitat {
     const ctx=canvas.getContext('2d')!;ctx.clearRect(0,0,512,64);ctx.fillStyle=color;ctx.font='600 28px sans-serif';ctx.textAlign='center';ctx.fillText(text,256,42);
     const map=new T.CanvasTexture(canvas);map.colorSpace=T.SRGBColorSpace;
     const sprite=new T.Sprite(new T.SpriteMaterial({map,depthTest:false,transparent:true}));sprite.scale.set(.65,.081,1);return sprite;
+  }
+  setAnnotations(visible: boolean) {
+    for (const label of this.labels) label.visible = visible;
+    for (const marker of this.markers.values()) marker.visible = visible;
+    this.room.requestRender();
   }
   update(life:Life,x:number,y:number,heat:boolean,food:boolean) {
     this.ring.position.set(x,-.137,-y);

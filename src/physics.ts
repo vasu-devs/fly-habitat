@@ -62,8 +62,9 @@ export class Physics {
       const buffer = versioned
         ? await getOrFetch(compiledUrl, compiledUrl, (got, total) => onProgress?.(`Loading anatomical body · ${progressText(got, total)}`))
         : await fetch(compiledUrl).then(r => { if (!r.ok) throw Error(`Body model: HTTP ${r.status}`); return r.arrayBuffer(); });
-      const bytes = new Uint8Array(buffer);
-      const vfs = new p.mujoco.MjVFS();
+        const bytes = new Uint8Array(buffer);
+        const vfs = new p.mujoco.MjVFS();
+        onProgress?.('Initializing anatomical joints and contacts…');
       try {
         vfs.addBuffer('habitat.mjb', bytes);
         p.model = p.mujoco.MjModel.from_binary_path('habitat.mjb', vfs);

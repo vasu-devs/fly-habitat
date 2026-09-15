@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 export default defineConfig({
   publicDir: "public",
   assetsInclude: ["**/*.wgsl"],
+  worker: { format: 'es' },
   build: {
     outDir: "dist",
     target: "esnext",

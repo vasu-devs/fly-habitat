@@ -9,7 +9,8 @@
 //   reward            → Steering.learn (progress), Life.step (homeostasis, tasks, death)
 import { loadBrain } from './brain';
 import { FlySim } from './sim';
-import { Physics } from './physics';
+import { BodyClient as Physics } from './bodyClient';
+import { withDeadline } from './deadline';
 import { Room } from './room';
 import { Habitat } from './habitat';
 import { FlyViewer } from './viewer';
@@ -29,10 +30,20 @@ const select = (id: string) => el<HTMLSelectElement>(id);
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
 const dialog = el<HTMLDialogElement>('model');
 button('about').onclick = () => dialog.showModal(); button('close-about').onclick = () => dialog.close();
+button('reload').onclick = () => location.reload();
 
 const SAVE = 'fly-habitat-lineage-v1';
 const benchmark = new URLSearchParams(location.search).has('benchmark');
 const timingSamples: { cycle: number; brain: number; body: number }[] = [];
+let readyAt = Infinity, startupLongestTaskMs = 0, runLongestTaskMs = 0;
+if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes.includes('longtask')) {
+  new PerformanceObserver(list => {
+    for (const entry of list.getEntries()) {
+      if (entry.startTime < readyAt) startupLongestTaskMs = Math.max(startupLongestTaskMs, entry.duration);
+      else runLongestTaskMs = Math.max(runLongestTaskMs, entry.duration);
+    }
+  }).observe({ type: 'longtask', buffered: true });
+}
 const visiblePanels = new Set<Element>();
 const panelObserver = new IntersectionObserver(entries => {
   for (const entry of entries) { if (entry.isIntersecting) visiblePanels.add(entry.target); else visiblePanels.delete(entry.target); }
@@ -89,7 +100,19 @@ let active = 0, cycles = 0, neuralMs = 0, physicsSeconds = 0, cycleMs = 0, brain
 const strip: number[][] = [];
 let stripRows: { name: string; ids: number[]; pop: boolean }[] = [];
 
-function progress(message: string) { text('boot', message); text('status', message); console.info('[habitat]', message); }
+const bootStarted = performance.now();
+let progressAt = bootStarted;
+function progress(message: string) { progressAt = performance.now(); text('boot', message); text('status', 'Loading model'); console.info('[habitat]', message); }
+const bootWatch = setInterval(() => {
+  if (ready || fatal) { clearInterval(bootWatch); return; }
+  const elapsed = Math.round((performance.now() - bootStarted) / 1000);
+  text('load-detail', `${elapsed} s elapsed · The full model loads once and is cached for later visits.`);
+  text('runtime-detail', 'Preparing measured anatomy and brain wiring. You can explore the controls while it loads.');
+  if (performance.now() - progressAt > 45_000) {
+    text('load-detail', `${elapsed} s elapsed · Still waiting for the model. You can reload without clearing the saved lineage.`);
+    button('reload').hidden = false;
+  }
+}, 1000);
 // The headline count eases toward the new value so it reads as a signal, not a jitter.
 let shownActive = 0, activityTarget = 0, tweening = false;
 function tweenActivity(target: number) {
@@ -110,16 +133,26 @@ function setRunning(value: boolean) {
   button('play').textContent = running ? 'Pause life' : 'Resume life';
   text('status', running ? 'Live experiment' : fatal ? 'Experiment stopped' : 'Paused');
   el('live-dot').classList.toggle('running', running);
+  text('runtime-detail', running ? 'Brain, body and learning are active. This lineage is saved on your device.' : fatal ? 'Simulation stopped. Return to Observe to reload the saved session.' : 'Paused. Camera, neural inspection and experiment controls remain available.');
 }
 function stop(error: unknown) {
+  if (fatal) return;
   fatal = true; setRunning(false);
   const message = error instanceof Error ? error.message : String(error);
   text('boot', message); el('loading').hidden = false; el('boot').classList.add('error');
   el('loading').querySelector('strong')!.textContent = 'The simulation could not continue';
-  el('loading').querySelector('.loader')?.remove(); save(); console.error(error);
+  button('reload').hidden = false; button('play').disabled = true;
+  text('status', 'Stopped · see Observe');
+  for (const id of ['next', 'reward-plus', 'reward-minus', 'pulse-cell', 'silence-cell', 'restore-wiring']) button(id).disabled = true;
+  select('task').disabled = true; input('gain').disabled = true; input('import').disabled = true;
+  el('loading').querySelector('.loader')?.remove();
+  // Never overwrite a good saved lineage with a fresh default after a boot failure.
+  if (ready) save();
+  body?.dispose(); sim?.device.destroy(); console.error(error);
 }
 function setCamera(mode: 'overview' | 'follow' | 'macro') {
   room.setView(mode); for (const id of ['overview', 'follow', 'macro']) button(id).classList.toggle('active', mode === id);
+  habitat.setAnnotations(mode === 'overview');
   el('viewport').querySelector<HTMLElement>('.scene-heading')!.style.display = mode === 'macro' ? 'none' : '';
 }
 function nameOf(i: number) {
@@ -322,7 +355,7 @@ async function cycle() {
   if (!life.state.alive) {
     body.driveLegs(0, 0); await room.advancePhysicsResponsive(80); physicsSeconds += .008;
     life.step(HABITAT_DT, q[0], q[1], false);
-    if (life.state.deathAge >= 2) { life.hatch(); body.reset(); sim.reset(); lastDecision = -100; arrivedFor = 0; prevDistance = NaN; trail.length = 0; escape = null; save(); }
+    if (life.state.deathAge >= 2) { life.hatch(); await body.reset(); sim.reset(); lastDecision = -100; arrivedFor = 0; prevDistance = NaN; trail.length = 0; escape = null; save(); }
     render(); return;
   }
   // 1. senses (authored encodings of the physical scene into labeled populations)
@@ -339,7 +372,7 @@ async function cycle() {
   sim.setExternalInput(ext);
   // 2. the measured brain
   const t0 = performance.now();
-  rates = await sim.captureRollingRate(window_, rates); neuralMs += window_;
+  rates = await withDeadline(sim.captureRollingRate(window_, rates), 20_000, 'The GPU stopped responding. Reload to restore the last saved lineage.'); neuralMs += window_;
   brainMs = performance.now() - t0;
   active = 0; for (const r of rates) if (r > 0) active++;
   const neuralActive = active > 0;
@@ -398,7 +431,7 @@ async function cycle() {
   if (fallen >= 2) {
     const yaw = Math.atan2(hy, hx);
     q[2] = body.spawnZ; q[3] = Math.cos(yaw / 2); q[4] = 0; q[5] = 0; q[6] = Math.sin(yaw / 2);
-    (body.data.qvel as Float64Array).fill(0, 0, 6); body.mujoco.mj_forward(body.model, body.data);
+    (body.data.qvel as Float64Array).fill(0, 0, 6); await body.setPose(q, body.data.qvel);
     fallen = 0; falls++; trail.length = 0; if (falls % 5 === 1) life.remember(`Fell over and righted itself (${falls} so far this session)`);
   }
   // 6. rewards and life
@@ -431,7 +464,7 @@ async function cycle() {
     timingSamples.push({ cycle: performance.now() - cycleStart, brain: brainMs, body: bodyMs });
     if (timingSamples.length > 30) timingSamples.shift();
     const avg = (key: 'cycle' | 'brain' | 'body') => timingSamples.reduce((sum, s) => sum + s[key], 0) / timingSamples.length;
-    const metrics = { samples: timingSamples.length, cycleMs: avg('cycle'), brainMs: avg('brain'), bodyMs: avg('body'), pace, window: window_ };
+    const metrics = { samples: timingSamples.length, cycleMs: avg('cycle'), brainMs: avg('brain'), bodyMs: avg('body'), pace, window: window_, startupLongestTaskMs, runLongestTaskMs };
     el('clock-cycle').dataset.performance = JSON.stringify(metrics);
     el('clock-cycle').title = `${metrics.cycleMs.toFixed(0)} ms average over ${metrics.samples} cycles`;
     if (benchmark && timingSamples.length === 30) { setRunning(false); text('status', 'Benchmark complete'); }
@@ -449,7 +482,6 @@ async function boot() {
     const saved = benchmark ? null : localStorage.getItem(SAVE);
     if (saved) { const c = JSON.parse(saved); life.restore(c.life); if (Array.isArray(c.pose) && c.pose.length === 109 && c.pose.every(Number.isFinite)) pose = c.pose; life.remember('Resumed saved lineage'); }
   } catch (error) { text('save-state', `Saved checkpoint could not be read: ${error instanceof Error ? error.message : String(error)}`); }
-  Physics.kinematicAssistEnabled = true; Physics.attitudeDamperEnabled = true; Physics.yawAssist = 4; Physics.assistUprightOnly = true;
   // Asset locations: same-origin in development; VITE_* URLs (a public bucket) in deployments that
   // cannot ship 100 MB-class files. Versions come from assets.json for permanent caching.
   const versionFor = await loadManifest();
@@ -459,34 +491,37 @@ async function boot() {
   (globalThis as unknown as { __flybodyBundleVersion?: string }).__flybodyBundleVersion = versionFor('flybody.bundle.bin').replace('?v=', '') || undefined;
   // The 126 MB brain downloads while the body loads; both are needed before the loop starts.
   let brainBytes = 0;
-  const brainPromise = loadBrain(brainUrl, (n, total) => { brainBytes = n; bootBar(.15 + .6 * (total ? n / total : 0)); });
+  const brainPromise = loadBrain(brainUrl, (n, total) => { brainBytes = n; progressAt = performance.now(); bootBar(.15 + .6 * (total ? n / total : 0)); if (room) progress(`Loading measured brain · ${(n / 1e6).toFixed(0)}${total ? ` / ${(total / 1e6).toFixed(0)}` : ''} MB`); });
   brainPromise.catch(() => {});
   const bodyVersion = releaseAssets.assets.find(asset => asset.file === 'habitat.mjb')!.sha256.slice(0, 12);
   const mjbUrl = env.VITE_HABITAT_MJB_URL || `/habitat.mjb?v=${bodyVersion}`;
-  const hasMjb = await fetch(mjbUrl, { method: 'HEAD' }).then(r => r.ok && !(r.headers.get('content-type') || '').includes('text/html')).catch(() => false);
+  const hasMjb = await fetch(mjbUrl, { method: 'HEAD', signal: AbortSignal.timeout(15_000) }).then(r => r.ok && !(r.headers.get('content-type') || '').includes('text/html')).catch(() => false);
   if (!hasMjb) progress('No compiled habitat model here: compiling the anatomical body with the habitat walls in this tab (slower first load)…');
-  body = await Physics.create(m => progress(brainBytes ? `${m} · brain ${(brainBytes / 1e6).toFixed(0)} MB` : m), hasMjb ? mjbUrl : undefined, hasMjb ? undefined : habitatFixturesXml());
+  body = await Physics.create(m => progress(brainBytes ? `${m} · brain ${(brainBytes / 1e6).toFixed(0)} MB` : m), hasMjb ? new URL(mjbUrl, location.href).href : '', versionFor('flybody.bundle.bin').replace('?v=', ''), hasMjb ? undefined : habitatFixturesXml());
   bootBar(.15);
-  if (pose) { (body.data.qpos as Float64Array).set(pose); body.mujoco.mj_forward(body.model, body.data); }
+  if (pose) await body.setPose(new Float64Array(pose));
   room = new Room({ container: el('viewport'), bg: 0x000000, floorColor: 0x16181b, pixelRatio: 1.25, maxFps: 24 }); room.externalClock = true;
   await room.attachPhysics(body); room.hideTarget(); habitat = new Habitat(room); setCamera(benchmark ? 'overview' : 'follow');
+  for (const id of ['overview', 'follow', 'macro']) button(id).disabled = false;
+  button('overview').onclick = () => setCamera('overview'); button('follow').onclick = () => setCamera('follow'); button('macro').onclick = () => setCamera('macro');
+  room.renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); stop('The 3D renderer lost its GPU connection. Reload the saved session.'); });
   room.advancePhysics(0);
   el('loading').classList.add('anatomy-ready');
   el('loading').querySelector('strong')!.textContent = 'Connecting the measured brain';
   progress('Anatomy ready. Reading 139,255 measured neurons…');
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-  meta = await fetch(metaUrl).then(r => { if (!r.ok) throw Error('brain.meta.json missing'); return r.json(); });
+  meta = await fetch(metaUrl, { signal: AbortSignal.timeout(30_000) }).then(r => { if (!r.ok) throw Error('brain.meta.json missing'); return r.json(); });
   const brain = await brainPromise;
   bootBar(.8);
   if (brain.header.numNeurons !== 139255 || brain.header.numEdges !== 15091983) throw Error('Unexpected connectome; no substitute model will be used.');
   progress('Compiling the measured graph for WebGPU…');
-  sim = await FlySim.create(brain);
-  sim.device.lost.then(info => { if (ready) stop(`GPU connection lost: ${info.message}`); });
+  sim = await withDeadline(FlySim.create(brain), 45_000, 'GPU initialization timed out. Reload or try a browser with hardware acceleration.');
+  sim.device.lost.then(info => stop(`GPU connection lost: ${info.message}`));
   sim.device.addEventListener('uncapturederror', event => stop(`GPU error: ${event.error.message}`));
   pops = buildPopulations(brain); plasticity = new Plasticity(brain);
   rates = new Float32Array(brain.header.numNeurons); ext = new Float32Array(rates.length);
   progress('Building the 3D brain map…');
-  viewer = new FlyViewer(brain, { container: el('brain-view'), pointSize: 850, pointOpacity: .55, bg: 0x000000, pixelRatio: 1.25, maxFps: 30 });
+  viewer = new FlyViewer(brain, { container: el('brain-view'), pointSize: 850, pointOpacity: .55, bg: 0x000000, pixelRatio: 1.25, maxFps: 30, fitPortrait: true });
   viewer.onPick(i => selectNeuron(i)); viewer.setPreset('iso');
   progress('Summing 15,091,983 measured edges into the connectome matrix…');
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -497,6 +532,8 @@ async function boot() {
   if (life.lesions.length || life.synapseGain !== 1) applyWiring();
   input('gain').value = String(Math.round(life.synapseGain * 100)); text('gain-label', `${input('gain').value}%`); input('learn').checked = life.learning;
   for (const id of ['play', 'next', 'reward-plus', 'reward-minus', 'export', 'restore-wiring']) button(id).disabled = false;
+  for (const control of document.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('.brain-controls button, .brain-controls select, #conn-wiring, #conn-drive')) control.disabled = false;
+  input('learn').disabled = false;
   select('task').disabled = false; input('gain').disabled = false; input('import').disabled = false;
   button('play').onclick = () => setRunning(!running);
   button('next').onclick = () => { requestedDeath = true; };
@@ -520,17 +557,19 @@ async function boot() {
       if (file.size > 3_000_000) throw Error('Checkpoint exceeds 3 MB');
       const candidate = JSON.parse(await file.text()); new Life().restore(candidate);
       while (busy) await new Promise(r => setTimeout(r, 20));
-      life.restore(candidate); body.reset(); sim.reset(); applyWiring();
+      life.restore(candidate); await body.reset(); sim.reset(); applyWiring();
       input('gain').value = String(Math.round(life.synapseGain * 100)); text('gain-label', `${input('gain').value}%`); input('learn').checked = life.learning;
       lastDecision = -100; lastLifetimeCount = -1; lastMemoryCount = -1; prevDistance = NaN; save(); render(); text('status', 'Lineage imported — resume when ready');
     } catch (error) { text('save-state', `Import rejected: ${error instanceof Error ? error.message : String(error)}`); }
     input('import').value = '';
   };
   window.addEventListener('resize', () => { drawStrip(); drawLineage(); viewer.resize(); });
-  ready = true; lastDecision = -100;
+  if (fatal) return;
+  ready = true; readyAt = performance.now(); lastDecision = -100;
   life.remember(`Habitat connected: bilateral senses → ${brain.header.numNeurons.toLocaleString()}-neuron LIF → learned steering + goal readout → jointed body`);
   el('loading').hidden = true; document.body.classList.add('ready'); setRunning(true); render(); drawLineage();
   window.addEventListener('pagehide', save);
+  window.addEventListener('workspace-view', () => { room.requestRender(); refreshInstruments(); drawLineage(); });
   void loop();
 }
 void boot().catch(stop);

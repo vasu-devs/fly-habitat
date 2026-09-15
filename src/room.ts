@@ -13,6 +13,7 @@
 
 import * as THREE from "three";
 import { Physics } from "./physics";
+import { BodyClient } from './bodyClient';
 import type { FlyMjModel } from "./mujocoModel";
 import { stepInBatches, yieldToBrowser } from './physicsBatch';
 
@@ -68,7 +69,7 @@ export class Room {
 
   private mjRoot = new THREE.Group();   // VISUAL_SCALE wrapper
   private bodies: THREE.Group[] = [];    // index = MuJoCo body id
-  private physics: Physics | null = null;
+  private physics: Physics | BodyClient | null = null;
   private rafId = 0;
 
   // Closed-loop visual target (a glowing sphere the fly can "see").
@@ -114,7 +115,7 @@ export class Room {
   setView(mode: 'follow' | 'overview' | 'macro') {
     this.renderDirty = true;
     this.overview = mode === 'overview';
-    this.radius = mode === 'overview' ? 37 : mode === 'macro' ? 4.2 : 8;
+    this.radius = mode === 'overview' ? 37 : mode === 'macro' ? 3.4 : 5.8;
     this.elevation = mode === 'overview' ? .95 : .48;
     this.azimuth = .55;
   }
@@ -124,7 +125,9 @@ export class Room {
   }
   advancePhysics(substeps: number) {
     if (!this.physics) return;
-    this.physics.step(substeps);
+    if (this.physics instanceof BodyClient) {
+      if (substeps !== 0) throw Error('Worker physics must be advanced asynchronously');
+    } else this.physics.step(substeps);
     this.syncBodyTransforms();
     this.renderDirty = true;
     this.renderer.shadowMap.needsUpdate = true;
@@ -134,10 +137,13 @@ export class Room {
 
   async advancePhysicsResponsive(substeps: number) {
     if (!this.physics) return;
-    await stepInBatches(substeps, (count, first) => {
-      this.physics!.step(count, first);
+    const physics = this.physics;
+    if (physics instanceof BodyClient) await physics.advance(substeps, () => {
       this.syncBodyTransforms();
       this.renderDirty = true;
+    });
+    else await stepInBatches(substeps, (count, first) => {
+      physics.step(count, first); this.syncBodyTransforms(); this.renderDirty = true;
     }, yieldToBrowser, 128);
     // One sensory frame per completed control cycle, independent of display FPS.
     this.renderer.shadowMap.needsUpdate = true;
@@ -147,8 +153,8 @@ export class Room {
 
   constructor(opts: RoomOpts) {
     const { container } = opts;
-    const w = container.clientWidth;
-    const h = container.clientHeight;
+    const w = Math.max(1, container.clientWidth);
+    const h = Math.max(1, container.clientHeight);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, opts.pixelRatio ?? 2));
@@ -221,7 +227,7 @@ export class Room {
     window.addEventListener("resize", () => this.onResize(container));
   }
 
-  async attachPhysics(physics: Physics) {
+  async attachPhysics(physics: Physics | BodyClient) {
     this.physics = physics;
     this.buildBodyGraphFromMujoco(physics);
     this.syncBodyTransforms();
@@ -232,7 +238,7 @@ export class Room {
   resetFly() { this.physics?.reset(); }
   bodySpeed(): number { return this.physics?.bodySpeed ?? 0; }
   /** Triggers DNp01 escape-jump: instantaneous upward impulse. */
-  jumpImpulse(speed: number) { this.physics?.jumpImpulse(speed); }
+  jumpImpulse(speed: number) { if (this.physics instanceof Physics) this.physics.jumpImpulse(speed); }
 
   /**
    * Sensor read for closed-loop control. Returns the signed horizontal
@@ -395,7 +401,7 @@ export class Room {
   }
 
   // --- scene-graph build (zalo pattern) -------------------------------------
-  private buildBodyGraphFromMujoco(phys: Physics) {
+  private buildBodyGraphFromMujoco(phys: Physics | BodyClient) {
     const m = phys.model as FlyMjModel;
     const ngeom = m.ngeom;
     const nbody = m.nbody;
@@ -484,6 +490,7 @@ export class Room {
 
       const mesh = new THREE.Mesh(geometry, material);
       if (geomBodyId[g] === 0 && type === T.mjGEOM_PLANE.value && this.floorColor !== undefined) material.color.setHex(this.floorColor);
+      if (geomBodyId[g] === 0 && type === T.mjGEOM_BOX.value && this.floorColor !== undefined) material.color.setHex(0x272b30);
       mesh.castShadow = geomBodyId[g] > 0 && a >= 1;
       mesh.receiveShadow = true;
       const v = new THREE.Vector3();
@@ -503,7 +510,7 @@ export class Room {
    * to re-parse OBJ on the JS side. Includes the y↔z, negate-y per-vertex
    * swizzle so the result lives in three.js y-up space without parent
    * rotation. */
-  private buildMeshGeometry(phys: Physics, meshId: number): THREE.BufferGeometry {
+  private buildMeshGeometry(phys: Physics | BodyClient, meshId: number): THREE.BufferGeometry {
     const m = phys.model as FlyMjModel;
     const mesh_vert = m.mesh_vert;
     const mesh_normal = m.mesh_normal;
@@ -677,8 +684,8 @@ export class Room {
 
   private onResize(container: HTMLElement) {
     this.renderDirty = true;
-    const w = container.clientWidth;
-    const h = container.clientHeight;
+    const w = Math.max(1, container.clientWidth);
+    const h = Math.max(1, container.clientHeight);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
@@ -712,7 +719,7 @@ export class Room {
         // true, the render-frame's sim budget has already been spent
         // and we skip the trailing step(32).
         const policyTook = this.externalClock || (this.drivePolicyTick?.() ?? false);
-        if (!policyTook) {
+        if (!policyTook && this.physics instanceof Physics) {
           // Brain → VNC stand-in → body. Two motor primitives selected
           // by DN drive: tripod walk gait (amplitude = forward) and
           // wing-buzz hover (amplitude = remaining drive after walking).

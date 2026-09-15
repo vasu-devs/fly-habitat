@@ -7,6 +7,7 @@
 // Invalidation comes from the ?v=<sha> in the key — a new build asks for
 // a different key, and idbPut drops the previous generation.
 
+import { withDeadline } from './deadline.ts';
 const DB_NAME = "webgpu-fly-cache";
 const DB_VERSION = 1;
 const STORE = "flybody";
@@ -29,6 +30,7 @@ function openDB(): Promise<IDBDatabase> {
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(Error('Asset cache is blocked by another tab'));
   });
   return dbPromise;
 }
@@ -129,20 +131,20 @@ export async function getOrFetch(
   // Local files are already on disk. Avoid cloning large buffers into IDB
   // while WASM and WebGPU are allocating their own copies at startup.
   if (typeof location !== 'undefined' && ['127.0.0.1', 'localhost'].includes(location.hostname)) {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
     if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
     const bytes = await response.arrayBuffer();
     onProgress?.(bytes.byteLength, bytes.byteLength);
     return bytes;
   }
   try {
-    const hit = await idbGet(key);
-    if (hit) return hit.bytes;
+    const hit = await withDeadline(idbGet(key), 4000, 'Asset cache lookup timed out');
+    if (hit) { onProgress?.(hit.bytes.byteLength, hit.bytes.byteLength); return hit.bytes; }
   } catch {
     // IDB unavailable (private mode, quota exceeded mid-write, etc.) —
     // fall back to plain fetch each call.
   }
-  const r = await fetch(url);
+  const r = await fetch(url, { signal: AbortSignal.timeout(120_000) });
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
   const bytes = onProgress && r.body
     ? await readWithProgress(r, onProgress)

@@ -13,6 +13,7 @@ export interface ViewerOpts {
   pixelRatio?: number;
   maxFps?: number;
   pointOpacity?: number;
+  fitPortrait?: boolean;
 }
 
 // Anatomy palette indexed by super_class enum (matches SUPER_CLASS_TABLE in
@@ -64,6 +65,7 @@ export class FlyViewer {
   private dirty = true;
   private visible = true;
   private maxFps = 60;
+  private fitPortrait = false;
   private visibilityObserver: IntersectionObserver;
 
   // simple orbit state — drag to rotate, wheel to zoom
@@ -87,12 +89,13 @@ export class FlyViewer {
 
     const { container } = opts;
     this.container = container;
-    const w = container.clientWidth;
-    const h = container.clientHeight;
+    const w = Math.max(1, container.clientWidth);
+    const h = Math.max(1, container.clientHeight);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, opts.pixelRatio ?? 2));
     this.maxFps = opts.maxFps ?? 60;
+    this.fitPortrait = opts.fitPortrait ?? false;
     this.visibilityObserver = new IntersectionObserver(entries => { this.visible = entries[0].isIntersecting; if (this.visible) this.applySnapshot(this.currentIdx); this.dirty = true; });
     this.visibilityObserver.observe(container);
     this.renderer.setSize(w, h);
@@ -161,10 +164,11 @@ export class FlyViewer {
     this.dirty = true;
     const ce = Math.cos(this.elevation), se = Math.sin(this.elevation);
     const ca = Math.cos(this.azimuth), sa = Math.sin(this.azimuth);
+    const distance = this.radius / (this.fitPortrait ? Math.min(1, this.camera.aspect) : 1);
     this.camera.position.set(
-      this.radius * ce * sa,
-      this.radius * se,
-      this.radius * ce * ca,
+      distance * ce * sa,
+      distance * se,
+      distance * ce * ca,
     );
     this.camera.lookAt(0, 0, 0);
   }
@@ -268,10 +272,11 @@ export class FlyViewer {
 
   private onResize(container: HTMLElement) {
     this.dirty = true;
-    const w = container.clientWidth;
-    const h = container.clientHeight;
+    const w = Math.max(1, container.clientWidth);
+    const h = Math.max(1, container.clientHeight);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.updateCameraFromOrbit();
     this.renderer.setSize(w, h);
   }
 

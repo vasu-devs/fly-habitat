@@ -3,39 +3,48 @@
 <body class="workspace">
 <a class="skip" href="#viewport">Skip to the habitat</a>
 <header class="top">
-  <a class="brand" href="#observation"><span class="brand-mark">f.</span><span class="brand-text">Fly Habitat<small>a living connectome</small></span></a>
-  <nav class="clocks" aria-label="Simulation clocks">
-    <span><b id="clock-neural">0.000</b>neural s</span>
-    <span><b id="clock-physics">0.00</b>physics s</span>
-    <span><b id="clock-habitat">0</b>habitat s</span>
-    <span><b id="clock-cycle">—</b>ms / cycle</span>
-  </nav>
+  <a class="brand" href="#observation"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 8v16M12 13 6 6M20 13l6-7M12 20l-6 6M20 20l6 6" stroke="currentColor" stroke-width="1.5"/><ellipse cx="11" cy="15" rx="4" ry="8" transform="rotate(-30 11 15)" stroke="currentColor"/><ellipse cx="21" cy="15" rx="4" ry="8" transform="rotate(30 21 15)" stroke="currentColor"/></svg></span><span class="brand-text">FLY<span class="brand-divider"> / </span>HABITAT<small>Living systems laboratory</small></span></a>
+
+  <nav class="workspace-nav" aria-label="Workspace"><button data-view="observation" aria-controls="observation" aria-current="page">Observe</button><button data-view="signals" aria-controls="signals">Neural activity</button><button data-view="instruments" aria-controls="instruments">Experiment</button></nav>
   <div class="live"><i id="live-dot"></i><span id="status">Preparing habitat</span></div>
   <a class="header-link" href="/lab.html">Circuit lab</a>
-  <button id="about" class="ghost">What is real?</button>
+  <button id="about" class="ghost">Model notes</button>
 </header>
 
-<nav class="workspace-nav" aria-label="Workspace sections"><div><a href="#observation" aria-current="location"><span>01</span> Observe</a><a href="#signals"><span>02</span> Signals</a><a href="#instruments"><span>03</span> Experiment</a></div><span class="workspace-note">DROSOPHILA MELANOGASTER <i> / </i> IN BROWSER</span></nav>
-<main id="observation">
-<section class="ribbon" aria-label="Active individual">
-  <div class="identity"><h3>Fly <span id="generation">001</span></h3><span id="life-badge">alive</span><span id="age" class="mono">0 s</span></div>
+
+<main>
+<div id="observation" class="workspace-view observation-layout">
+
+<section class="stage">
+  <section id="viewport" aria-label="Interactive 3D fly habitat">
+    <div class="scene-heading"><span class="eyebrow">LIVE OBSERVATION <span class="scene-index">3.5 × 2.5 CM</span></span><h1>A fly, living its life.</h1><p>Measured anatomy. Simulated behaviour.</p></div>
+    <div id="loading"><span class="loader"></span><strong>Opening the habitat</strong><p id="boot">Loading the anatomical model…</p><small id="load-detail">Preparing the model. Controls stay available while it loads.</small><button id="reload" hidden>Reload saved session</button><div class="boot-bar"><i id="boot-bar"></i></div></div>
+    <div class="view-controls" aria-label="Camera"><button id="follow" class="active" disabled>Follow fly</button><button id="overview" disabled>Whole habitat</button><button id="macro" disabled>Anatomy</button></div>
+    <div class="scene-footer"><span>DRAG TO ORBIT <i>·</i> SCROLL TO ZOOM</span><span id="position" class="mono">0.0 / 0.0 mm</span></div>
+    <div id="fly-tag"><i></i><span id="behavior">Waking up</span><small id="target">Generation 1</small></div>
+  </section>
+
+
+</section>
+<aside class="ribbon" aria-label="Active individual">
+  <div class="sidebar-heading"><span>INDIVIDUAL</span><span>D. melanogaster</span></div>
+  <div class="identity"><h3>Subject <span id="generation">001</span></h3><span id="life-badge">loading</span><span id="age" class="mono">0 s</span></div>
   <p id="action-description">Preparing the first lifetime.</p>
-  <div class="vitals" id="vitals"></div>
-  <div class="ribbon-controls">
+  <div class="sub-label">Physiology <span>live state</span></div><div class="vitals" id="vitals"></div>
+  <div class="sub-label">Behaviour</div><div class="ribbon-controls">
     <select id="task" aria-label="Assign a task" disabled><option value="auto">Autonomous life</option><option value="eat">Find fruit and eat</option><option value="drink">Find water and drink</option><option value="sleep">Rest in the refuge</option><option value="forage">Collect pollen</option><option value="nest">Deliver pollen / lay an egg</option><option value="explore">Explore the courtyard</option></select>
     <label><input id="food" type="checkbox" checked> Food</label>
     <label><input id="heat" type="checkbox"> Heat stress</label>
   </div>
-</section>
-<section class="stage">
-  <section id="viewport" aria-label="Interactive 3D fly habitat">
-    <div class="scene-heading"><span class="eyebrow">01 / Environment · 3.5 × 2.5 cm</span><h1>The habitat</h1></div>
-    <div id="loading"><span class="loader"></span><strong>Opening the habitat</strong><p id="boot">Loading the anatomical model…</p><small>Measured brain wiring · jointed anatomy · WebGPU</small><div class="boot-bar"><i id="boot-bar"></i></div></div>
-    <div class="view-controls" aria-label="Camera"><button id="overview" class="active">House</button><button id="follow">Follow</button><button id="macro">Anatomy</button></div>
-    <div class="scene-footer"><span>Drag to orbit · scroll to zoom · click a zone to assign it</span><span id="position" class="mono">0.0 / 0.0 mm</span></div>
-    <div id="fly-tag"><i></i><span id="behavior">Waking up</span><small id="target">Generation 1</small></div>
-  </section>
-
+<div class="side-note"><span>MODEL STATUS</span><p id="runtime-detail">Loading the measured brain and anatomical body.</p></div>  <nav class="clocks" aria-label="Simulation clocks">
+    <span><b id="clock-neural">0.000</b>neural s</span>
+    <span><b id="clock-physics">0.00</b>physics s</span>
+    <span><b id="clock-habitat">0</b>habitat s</span>
+    <span><b id="clock-cycle">—</b>ms / cycle</span>
+  </nav><div class="sidebar-foot"><span>139,255 neurons</span><span>15.1M synapses</span></div></aside>
+</div>
+<div class="workspace-view" id="signals" hidden>
+<div class="workspace-section-heading"><h2>Neural signals</h2><span>02 / Live activity</span></div>
   <section id="brain-pane" aria-label="Live 3D brain activity">
     <div id="brain-view"></div>
     <div class="brain-heading"><span class="eyebrow">FlyWire v783 · live</span><h2><b id="activity">—</b><span>of 139,255 neurons spiking</span></h2><span class="fine" id="brain-window">10 ms window · 15,091,983 edges</span></div>
@@ -43,24 +52,19 @@
       <li><i style="--c:#f2c14e"></i>Kenyon cells</li><li><i style="--c:#5fd6d6"></i>MBON</li><li><i style="--c:#7ad38a"></i>Projection</li><li><i style="--c:#f08a3e"></i>Olfactory receptor</li><li><i style="--c:#b48cf0"></i>Lateral horn</li><li><i style="--c:#ef5a5a"></i>Descending</li><li><i style="--c:#4fb3c9"></i>Optic</li><li><i style="--c:#7f96b8"></i>Central</li>
     </ul>
     <div class="brain-controls" aria-label="Brain view">
-      <button id="orbit" data-on="false">Orbit</button>
+      <button disabled id="orbit" data-on="false">Orbit</button>
       <span class="sep"></span>
-      <button data-preset="front">Front</button><button data-preset="top">Top</button><button data-preset="side">Side</button><button data-preset="iso" class="active">Iso</button>
+      <button disabled data-preset="front">Front</button><button disabled data-preset="top">Top</button><button disabled data-preset="side">Side</button><button disabled data-preset="iso" class="active">Iso</button>
       <span class="sep"></span>
-      <select id="filter" aria-label="Show one population"><option value="">All populations</option></select>
-      <button id="hemi" data-on="false">Hemispheres</button>
+      <select disabled id="filter" aria-label="Show one population"><option value="">All populations</option></select>
+      <button disabled id="hemi" data-on="false">Hemispheres</button>
     </div>
     <details class="inspector" id="inspector">
       <summary class="inspector-head"><span class="eyebrow">Cell inspector</span><span id="selected-name">Click a neuron</span></summary>
       <p id="selected-detail" class="fine">Pick any point in the brain to read its class, incoming synapses and firing rate.</p>
-      <div class="inspector-actions"><button id="pulse-cell" disabled>Pulse 200 ms</button><button id="silence-cell" disabled>Disconnect</button><button id="restore-wiring" class="ghost">Restore wiring</button><div id="top-neurons" class="top-neurons" aria-label="Most active neurons"></div></div>
+      <div class="inspector-actions"><button id="pulse-cell" disabled>Pulse 200 ms</button><button id="silence-cell" disabled>Disconnect</button><button disabled id="restore-wiring" class="ghost">Restore wiring</button><div id="top-neurons" class="top-neurons" aria-label="Most active neurons"></div></div>
     </details>
   </section>
-</section>
-
-
-
-<div class="workspace-section-heading" id="signals"><h2>Neural signals</h2><span>02 / Live activity</span></div>
 <section class="signals">
   <section class="panel strip-panel" aria-label="Live spike raster of named descending neurons and populations">
     <div class="section-label">Spike strip <span>named descending neurons · populations · 240 cycles</span></div>
@@ -74,7 +78,9 @@
   </section>
 </section>
 
-<div class="workspace-section-heading" id="instruments"><h2>Experiment desk</h2><span>03 / Sense, intervene, compare</span></div>
+</div>
+<div class="workspace-view" id="instruments" hidden>
+<div class="workspace-section-heading"><h2>Experiment desk</h2><span>03 / Sense, intervene, compare</span></div>
 <section class="instruments">
   <section class="panel conn-panel">
     <div class="section-label">Connectome matrix <span class="mono" id="conn-mode-label">measured wiring</span></div>
@@ -83,7 +89,7 @@
       <canvas id="conn-matrix" width="330" height="330" aria-label="Summed synaptic weight from each presynaptic population (rows) to each postsynaptic population (columns)"></canvas>
       <div class="conn-axis-x" id="conn-axis-x"></div>
     </div>
-    <div class="segmented"><button id="conn-wiring" class="active">Measured wiring</button><button id="conn-drive">Live drive</button></div>
+    <div class="segmented"><button disabled id="conn-wiring" class="active">Measured wiring</button><button disabled id="conn-drive">Live drive</button></div>
     <p id="conn-readout" class="fine">Rows are presynaptic, columns postsynaptic. Hover a cell for the summed signed weight and edge count.</p>
   </section>
 
@@ -108,7 +114,7 @@
     <div class="sub-label">Goal values <span>Q + innate need</span></div><div id="q-values" class="bars"></div>
     <div class="sub-label">Steering weights <span id="steer-updates" class="mono">0 updates</span></div><div id="steer-weights" class="bars"></div>
     <div class="feedback"><button id="reward-plus" disabled>+ Reward</button><button id="reward-minus" disabled>− Discourage</button></div>
-    <label class="check"><input type="checkbox" id="learn" checked> Learn from outcomes</label>
+    <label class="check"><input type="checkbox" id="learn" checked disabled> Learn from outcomes</label>
     <label class="slider">Navigation assist <output id="assist-label" class="mono">0%</output><input id="assist" type="range" min="0" max="100" step="10" value="0" aria-label="Blend of coordinate-based steering"></label>
     <label class="slider">Synaptic strength <output id="gain-label" class="mono">100%</output><input id="gain" type="range" min="0" max="100" step="10" value="100" aria-label="Connectome synaptic strength" disabled></label>
     <label class="row">Neural window <select id="window" aria-label="Neural milliseconds per cycle"><option value="5">5 ms</option><option value="10" selected>10 ms</option><option value="20">20 ms</option></select></label>
@@ -127,13 +133,14 @@
   </section>
 </section>
 
+</div>
 </main>
 <footer class="transport">
   <button id="play" class="primary" disabled>Start life</button>
-  <label>Pace <select id="speed" aria-label="Simulation pace"><option value="1">1×</option><option value="3" selected>3×</option><option value="8">8×</option></select></label>
-  <button id="next" disabled>End life → inherit</button>
-  <span id="save-state" class="fine">Saved locally</span>
-  <button id="export" class="ghost" disabled>Export lineage</button>
+  <label>Simulation pace <select id="speed" aria-label="Simulation pace"><option value="1">1×</option><option value="3" selected>3×</option><option value="8">8×</option></select></label>
+  <button id="next" disabled>Next generation</button>
+  <span id="save-state" class="fine">Local lineage</span>
+  <button id="export" class="ghost" disabled>Export</button>
   <label class="import ghost">Import<input id="import" type="file" accept="application/json,.json" hidden disabled></label>
 </footer>
 

@@ -24,7 +24,7 @@ export async function loadManifest(
 ): Promise<VersionFor> {
   let manifest: Record<string, string> = {};
   try {
-    const r = await fetch(url, { cache: "no-cache" });
+    const r = await fetch(url, { cache: "no-cache", signal: AbortSignal.timeout(10_000) });
     if (r.ok) manifest = await r.json();
   } catch {
     return NOOP;
