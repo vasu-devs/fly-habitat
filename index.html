@@ -5,7 +5,7 @@
 <header class="top">
   <a class="brand" href="#observation"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 8v16M12 13 6 6M20 13l6-7M12 20l-6 6M20 20l6 6" stroke="currentColor" stroke-width="1.5"/><ellipse cx="11" cy="15" rx="4" ry="8" transform="rotate(-30 11 15)" stroke="currentColor"/><ellipse cx="21" cy="15" rx="4" ry="8" transform="rotate(30 21 15)" stroke="currentColor"/></svg></span><span class="brand-text">FLY<span class="brand-divider"> / </span>HABITAT<small>Living systems laboratory</small></span></a>
 
-  <nav class="workspace-nav" aria-label="Workspace"><button data-view="observation" aria-controls="observation" aria-current="page">Observe</button><button data-view="signals" aria-controls="signals">Signals</button><button data-view="instruments" aria-controls="instruments">Experiment</button></nav>
+  <nav class="workspace-nav" aria-label="Workspace"><button data-view="observation" aria-controls="observation" aria-current="location">Overview</button><button data-view="signals" aria-controls="signals">Live signals</button><button data-view="instruments" aria-controls="instruments">Controls</button><button data-view="history" aria-controls="history">History</button></nav>
   <div class="live"><i id="live-dot"></i><span id="status">Preparing habitat</span></div>
   <a class="header-link" href="/lab.html">Circuit lab</a>
   <button id="about" class="ghost">Model notes</button>
@@ -46,6 +46,31 @@
       <div class="inspector-actions"><button id="pulse-cell" disabled>Pulse 200 ms</button><button id="silence-cell" disabled>Disconnect</button><button disabled id="restore-wiring" class="ghost">Restore wiring</button><div id="top-neurons" class="top-neurons" aria-label="Most active neurons"></div></div>
     </details>
   </section>
+<div class="workspace-view" id="signals">
+<div class="workspace-section-heading"><h2>Live signals</h2><span>Neural activity · sensory inputs</span></div>
+
+<section class="signals">
+  <section class="panel strip-panel" aria-label="Live spike raster of named descending neurons and populations">
+    <div class="section-label">Spike strip <span>named descending neurons · populations · 240 cycles</span></div>
+    <div class="strip"><div class="strip-labels" id="strip-labels"></div><canvas id="strip" height="168"></canvas></div>
+  </section>
+  <section class="panel matrix-panel">
+    <div class="section-label">Every neuron, one pixel <span id="matrix-count" class="mono">139,255 px</span></div>
+    <div class="matrix-groups" id="matrix-groups"></div>
+    <div class="matrix-frame"><canvas id="neuron-matrix" width="512" height="272" aria-label="Activity of every neuron, one pixel each, grouped by population and hemisphere"></canvas></div>
+    <p class="fine">Populations in the order shown, left hemisphere first within each. Brightness is the cell's firing rate in the last window.</p>
+  </section>
+  <section class="panel eye-panel">
+    <div class="section-label">What the fly senses <span class="mono">retina 64 × 16</span></div>
+    <canvas id="eye" width="64" height="16" aria-label="The fly's own rendered retina"></canvas>
+    <div class="eye-row"><span>Optic drive</span><b id="eye-left" class="mono">0.00</b><span class="fine">L</span><b id="eye-right" class="mono">0.00</b><span class="fine">R</span></div>
+    <div class="sub-label">Odor at the antennae · left | right</div>
+    <div id="sniff"></div>
+    <p class="fine">Plumes and the rendered retina are the only inputs the brain receives. Steering reads the brain, not these numbers.</p>
+  </section>
+</section>
+
+</div>
 <aside class="ribbon" aria-label="Active individual">
   <div class="sidebar-heading"><span>CURRENT GENERATION</span><span>D. melanogaster</span></div>
   <div class="identity"><h3>Subject <span id="generation">001</span></h3><span id="life-badge">loading</span><span id="age" class="mono">0 s</span></div>
@@ -63,25 +88,8 @@
     <span><b id="clock-cycle">—</b>ms / cycle</span>
   </nav><div class="sidebar-foot"><span>139,255 neurons</span><span>15.1M synapses</span></div></aside>
 </div>
-<section class="generation-section"><div class="workspace-section-heading"><h2>Lifetime archive</h2><span id="archive-count">No completed generations</span></div><p class="fine" id="continuity-note">Each death archives its outcome and both learners. Records are currently stored in this browser; a shared 24/7 host is not connected yet.</p><div id="generation-history"><p class="empty">The first lifetime is in progress. Its record will appear here when it ends.</p></div><button id="older-generations" hidden>Load earlier generations</button></section>
-<div class="workspace-view" id="signals" hidden>
-<div class="workspace-section-heading"><h2>Neural signals</h2><span>02 / Live activity</span></div>
 
-<section class="signals">
-  <section class="panel strip-panel" aria-label="Live spike raster of named descending neurons and populations">
-    <div class="section-label">Spike strip <span>named descending neurons · populations · 240 cycles</span></div>
-    <div class="strip"><div class="strip-labels" id="strip-labels"></div><canvas id="strip" height="168"></canvas></div>
-  </section>
-  <section class="panel matrix-panel">
-    <div class="section-label">Every neuron, one pixel <span id="matrix-count" class="mono">139,255 px</span></div>
-    <div class="matrix-groups" id="matrix-groups"></div>
-    <div class="matrix-frame"><canvas id="neuron-matrix" width="512" height="272" aria-label="Activity of every neuron, one pixel each, grouped by population and hemisphere"></canvas></div>
-    <p class="fine">Populations in the order shown, left hemisphere first within each. Brightness is the cell's firing rate in the last window.</p>
-  </section>
-</section>
-
-</div>
-<div class="workspace-view" id="instruments" hidden>
+<div class="workspace-view" id="instruments">
 <div class="workspace-section-heading"><h2>Experiment desk</h2><span>03 / Sense, intervene, compare</span></div>
 <section class="instruments">
   <section class="panel conn-panel">
@@ -101,14 +109,7 @@
     <p class="fine">Left and right are split by the medial plane of measured soma positions; bars are the mean rate of every labeled cell.</p>
   </section>
 
-  <section class="panel eye-panel">
-    <div class="section-label">What the fly senses <span class="mono">retina 64 × 16</span></div>
-    <canvas id="eye" width="64" height="16" aria-label="The fly's own rendered retina"></canvas>
-    <div class="eye-row"><span>Optic drive</span><b id="eye-left" class="mono">0.00</b><span class="fine">L</span><b id="eye-right" class="mono">0.00</b><span class="fine">R</span></div>
-    <div class="sub-label">Odor at the antennae · left | right</div>
-    <div id="sniff"></div>
-    <p class="fine">Plumes and the rendered retina are the only inputs the brain receives. Steering reads the brain, not these numbers.</p>
-  </section>
+
 
   <section class="panel learning">
     <div class="section-label">Learning <span id="update-count" class="mono">0 updates</span></div>
@@ -136,6 +137,7 @@
 </section>
 
 </div>
+<section class="generation-section" id="history"><div class="workspace-section-heading"><h2>Lifetime archive</h2><span id="archive-count">No completed generations</span></div><p class="fine" id="continuity-note">Each death archives its outcome and both learners. Records are currently stored in this browser; a shared 24/7 host is not connected yet.</p><div id="generation-history"><p class="empty">The first lifetime is in progress. Its record will appear here when it ends.</p></div><button id="older-generations" hidden>Load earlier generations</button></section>
 </main>
 <footer class="transport">
   <button id="play" class="primary" disabled>Start life</button>

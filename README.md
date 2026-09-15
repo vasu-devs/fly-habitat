@@ -7,7 +7,7 @@ A fruit-fly connectome experiment in a 3D home: measured FlyWire wiring simulate
 ## Explore
 
 - Follow the fly as it finds food and water, rests, collects pollen, tends a nursery, lays eggs and dies.
-- Watch the body and all 139,255 neurons side by side; inactive cells stay dim and simulated spikes light them up. Signals includes the pixel matrix and descending-neuron activity.
+- Watch the body and all 139,255 neurons side by side, with the live spike raster, neuron matrix and retina directly below. Inactive cells stay dim and simulated spikes light them up. Connectivity, populations, learning and lineage remain visible further down the same dashboard; navigation jumps to sections without hiding instruments.
 - Give reinforcement, freeze learning, alter synaptic strength, pulse a neuron or disconnect it.
 - Expand lifetime records for death causes, attempted tasks, outcomes, exposures, experiences and inherited weight changes. Older records are kept in a browser archive; checkpoint export/import includes the latest 100 generations.
 
