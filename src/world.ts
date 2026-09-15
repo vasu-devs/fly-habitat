@@ -11,6 +11,9 @@ import { loadBrain } from './brain';
 import { FlySim } from './sim';
 import { BodyClient as Physics } from './bodyClient';
 import { withDeadline } from './deadline';
+import { renderLifetimeHistory } from './lifetimeView';
+import { archiveLifetimes, readLifetimes } from './lifetimeArchive';
+import type { Lifetime } from './life';
 import { Room } from './room';
 import { Habitat } from './habitat';
 import { FlyViewer } from './viewer';
@@ -33,6 +36,36 @@ button('about').onclick = () => dialog.showModal(); button('close-about').onclic
 button('reload').onclick = () => location.reload();
 
 const SAVE = 'fly-habitat-lineage-v1';
+let archiveId = crypto.randomUUID();
+let displayedHistory: Lifetime[] = [];
+let archivedThrough = 0;
+let archiveBusy = false;
+async function updateHistory() {
+  const lineage = archiveId;
+  const fresh = life.lifetimes.filter(l => l.generation > archivedThrough);
+  const combined = new Map([...displayedHistory, ...life.lifetimes].map(l => [l.generation, l]));
+  displayedHistory = [...combined.values()].sort((a, b) => a.generation - b.generation);
+  renderLifetimeHistory(el('generation-history'), displayedHistory);
+  text('archive-count', `${displayedHistory.length} recorded generations`);
+  if (benchmark || !fresh.length || archiveBusy) return;
+  archiveBusy = true;
+  let succeeded = false;
+  try {
+    await archiveLifetimes(lineage, fresh);
+    succeeded = true;
+    if (archiveId === lineage) {
+      archivedThrough = fresh.at(-1)!.generation;
+      // Keep the current page bounded; older records remain in IndexedDB.
+      if (displayedHistory.length > 100) displayedHistory = displayedHistory.slice(-100);
+      el('older-generations').hidden = (displayedHistory[0]?.generation ?? 1) <= 1;
+    }
+  } catch { text('continuity-note', 'The archive could not be written. Export the lineage to preserve these records.'); }
+  finally {
+    archiveBusy = false;
+    // A death or import can arrive while the previous write is in flight.
+    if (succeeded && (archiveId !== lineage || life.lifetimes.some(l => l.generation > archivedThrough))) void updateHistory();
+  }
+}
 const benchmark = new URLSearchParams(location.search).has('benchmark');
 const timingSamples: { cycle: number; brain: number; body: number }[] = [];
 let readyAt = Infinity, startupLongestTaskMs = 0, runLongestTaskMs = 0;
@@ -95,6 +128,7 @@ let vision = { left: 0, right: 0 };
 let debug: Record<string, unknown> = {};
 (window as unknown as { __habitat: () => Record<string, unknown> }).__habitat = () => debug;
 let lastMemoryCount = -1, lastMemoryEvent: object | undefined, lastLifetimeCount = -1;
+let lastLifetimeGeneration = -1;
 let selected = -1, pulseUntil = -1, pulseNeuron = -1;
 let active = 0, cycles = 0, neuralMs = 0, physicsSeconds = 0, cycleMs = 0, brainMs = 0, bodyMs = 0;
 const strip: number[][] = [];
@@ -124,7 +158,7 @@ function bootBar(fraction: number) { el('boot-bar').style.width = `${Math.round(
 function save() {
   if (benchmark) return;
   try {
-    localStorage.setItem(SAVE, JSON.stringify({ life: life.checkpoint(), pose: body ? Array.from(body.data.qpos as Float64Array) : undefined }));
+    localStorage.setItem(SAVE, JSON.stringify({ archiveId, life: life.checkpoint(), pose: body ? Array.from(body.data.qpos as Float64Array) : undefined }));
     text('save-state', `Saved locally · ${life.updates + life.steering.updates} updates`);
   } catch { text('save-state', 'Storage unavailable — export to keep this lineage'); }
 }
@@ -330,7 +364,7 @@ function render() {
     }
     lastMemoryCount = life.memories.length; lastMemoryEvent = life.memories.at(-1);
   }
-  if (lastLifetimeCount !== life.lifetimes.length) {
+  if (lastLifetimeCount !== life.lifetimes.length || lastLifetimeGeneration !== (life.lifetimes.at(-1)?.generation ?? 0)) {
     const panel = el('lineage'); panel.replaceChildren();
     for (const l of life.lifetimes.slice(-12).reverse()) {
       const row = document.createElement('div'); row.className = 'life-row';
@@ -340,9 +374,11 @@ function render() {
     const t = life.trend();
     text('comparison', t ? `Early third → latest third of ${t.lifetimes} lifetimes: reward ${t.early.reward.toFixed(1)} → ${t.late.reward.toFixed(1)}, deliveries ${t.early.tasks.toFixed(1)} → ${t.late.tasks.toFixed(1)}, age ${t.early.age.toFixed(0)} → ${t.late.age.toFixed(0)} s. Conditions may differ between lifetimes; this is a measured outcome, not a controlled benchmark.` : 'At least two completed lifetimes are needed to compare outcomes.');
     drawLineage(); lastLifetimeCount = life.lifetimes.length;
+    lastLifetimeGeneration = life.lifetimes.at(-1)?.generation ?? 0;
+    void updateHistory();
   }
   if (panelVisible('strip')) drawStrip();
-  if (body) { const q = body.data.qpos as Float64Array; text('position', `${(q[0] * 10).toFixed(1)} / ${(q[1] * 10).toFixed(1)} mm`); habitat.update(life, q[0], q[1], input('heat').checked, input('food').checked); room.requestRender(); }
+  if (body) { const q = body.data.qpos as Float64Array; text('position', `${(q[0] * 10).toFixed(1)} / ${(q[1] * 10).toFixed(1)} mm`); habitat.update(life, q[0], q[1], input('heat').checked, input('food').checked, input('predators').checked); room.requestRender(); }
 }
 
 // ---------- the control cycle ----------
@@ -402,6 +438,7 @@ async function cycle() {
   const policyTurn = life.steering.act(lateral, goalSignal, () => life.random(), goalTrend);
   const neuralDrive = neuralActive ? clamp(.35 + Object.values(popHz).reduce((a, b) => a + b, 0) * 15, 0, 1) : 0;
   const assist = Number(input('assist').value) / 100;
+  if (assist > 0) life.episode.assistedSeconds += HABITAT_DT * pace;
   let turn = arrived ? 0 : clamp((1 - assist) * policyTurn + assist * clamp(angle * .65, -1, 1), -1, 1);
   // Authored escape reflex: if the body has not displaced for STUCK_WINDOW cycles (a wall or
   // furniture leg), hold a turn for a while. Not a measured circuit; keeps the experiment moving.
@@ -413,7 +450,7 @@ async function cycle() {
   if (arrived || prevGoal !== life.state.action) trail.length = 0;
   const turnCycles = Math.max(3, Math.round(Math.PI / 2 / (Physics.yawAssist * .9 * .016 * pace)));
   let forwardOverride: number | null = null;
-  if (pinned && !arrived && !escape) { escape = { phase: 'back', left: Math.round(8 / pace) + 2 }; stuckTurn = Math.abs(lateral[6]) > .05 ? Math.sign(lateral[6]) : life.random() < .5 ? -1 : 1; }
+  if (pinned && !arrived && !escape) { escape = { phase: 'back', left: Math.round(8 / pace) + 2 }; stuckTurn = Math.abs(lateral[6]) > .05 ? Math.sign(lateral[6]) : life.random() < .5 ? -1 : 1; life.episode.stuckRecoveries++; life.remember('Obstacle reflex: backing up, turning and trying a new heading'); }
   if (escape) {
     escape.left--; trail.length = 0;
     if (escape.phase === 'back') { turn = 0; forwardOverride = -.6; if (escape.left <= 0) escape = { phase: 'turn', left: turnCycles }; }
@@ -433,12 +470,13 @@ async function cycle() {
     q[2] = body.spawnZ; q[3] = Math.cos(yaw / 2); q[4] = 0; q[5] = 0; q[6] = Math.sin(yaw / 2);
     (body.data.qvel as Float64Array).fill(0, 0, 6); await body.setPose(q, body.data.qvel);
     fallen = 0; falls++; trail.length = 0; if (falls % 5 === 1) life.remember(`Fell over and righted itself (${falls} so far this session)`);
+    life.episode.falls++;
   }
   // 6. rewards and life
   const after = room.targetDistance();
   if (Number.isFinite(prevDistance)) life.steering.learn(clamp((prevDistance - after) * 25, -1, 1) - .02 + (arrived ? .3 : 0));
   prevDistance = after;
-  for (let i = 0; i < pace; i++) life.step(HABITAT_DT, q[0], q[1], neuralActive, foodOn, input('heat').checked);
+  for (let i = 0; i < pace; i++) life.step(HABITAT_DT, q[0], q[1], neuralActive, foodOn, input('heat').checked, input('predators').checked);
   arrivedFor = arrived && neuralActive ? arrivedFor + HABITAT_DT * pace : 0;
   if (arrivedFor >= 3.1 && !forced) { lastDecision = -100; arrivedFor = 0; }
   if (!Array.from(q.subarray(0, 7)).every(Number.isFinite)) throw Error('Physics became non-finite; lineage saved before further stepping.');
@@ -477,10 +515,11 @@ async function loop() {
 }
 
 async function boot() {
+  if (benchmark) input('predators').checked = false;
   if (!navigator.gpu) throw Error('This habitat needs WebGPU. Use a current Chrome or Edge with hardware acceleration enabled.');
   try {
     const saved = benchmark ? null : localStorage.getItem(SAVE);
-    if (saved) { const c = JSON.parse(saved); life.restore(c.life); if (Array.isArray(c.pose) && c.pose.length === 109 && c.pose.every(Number.isFinite)) pose = c.pose; life.remember('Resumed saved lineage'); }
+    if (saved) { const c = JSON.parse(saved); life.restore(c.life); if (typeof c.archiveId === 'string' && /^[a-z0-9-]{1,80}$/i.test(c.archiveId)) archiveId = c.archiveId; if (Array.isArray(c.pose) && c.pose.length === 109 && c.pose.every(Number.isFinite)) pose = c.pose; life.remember('Resumed saved lineage'); }
   } catch (error) { text('save-state', `Saved checkpoint could not be read: ${error instanceof Error ? error.message : String(error)}`); }
   // Asset locations: same-origin in development; VITE_* URLs (a public bucket) in deployments that
   // cannot ship 100 MB-class files. Versions come from assets.json for permanent caching.
@@ -521,7 +560,7 @@ async function boot() {
   pops = buildPopulations(brain); plasticity = new Plasticity(brain);
   rates = new Float32Array(brain.header.numNeurons); ext = new Float32Array(rates.length);
   progress('Building the 3D brain map…');
-  viewer = new FlyViewer(brain, { container: el('brain-view'), pointSize: 850, pointOpacity: .55, bg: 0x000000, pixelRatio: 1.25, maxFps: 30, fitPortrait: true });
+  viewer = new FlyViewer(brain, { container: el('brain-view'), pointSize: 850, pointOpacity: .55, bg: 0x000000, pixelRatio: 1.25, maxFps: 30, fitPortrait: true, inactiveScale: .06 });
   viewer.onPick(i => selectNeuron(i)); viewer.setPreset('iso');
   progress('Summing 15,091,983 measured edges into the connectome matrix…');
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -543,6 +582,7 @@ async function boot() {
   input('gain').oninput = () => text('gain-label', `${input('gain').value}%`);
   input('gain').onchange = () => { life.synapseGain = Number(input('gain').value) / 100; pendingWiring = true; life.remember(`Connectome strength set to ${input('gain').value}%`); save(); };
   input('assist').oninput = () => text('assist-label', `${input('assist').value}%`);
+  for (const id of ['food', 'heat', 'predators']) input(id).onchange = () => { life.remember(`${id === 'predators' ? 'Predator pressure' : id === 'heat' ? 'Heat stress' : 'Food availability'} ${input(id).checked ? 'enabled' : 'disabled'}`); render(); save(); };
   select('task').onchange = () => { lastDecision = -100; life.remember(`Task set: ${select('task').selectedOptions[0].text}`); };
   select('window').onchange = () => life.remember(`Neural window set to ${select('window').value} ms per cycle`);
   habitat.onSelect = action => { select('task').value = action; lastDecision = -100; life.remember(`Assigned ${action} by clicking its habitat zone`); };
@@ -557,7 +597,7 @@ async function boot() {
       if (file.size > 3_000_000) throw Error('Checkpoint exceeds 3 MB');
       const candidate = JSON.parse(await file.text()); new Life().restore(candidate);
       while (busy) await new Promise(r => setTimeout(r, 20));
-      life.restore(candidate); await body.reset(); sim.reset(); applyWiring();
+      life.restore(candidate); archiveId = crypto.randomUUID(); displayedHistory = []; archivedThrough = 0; await body.reset(); sim.reset(); applyWiring();
       input('gain').value = String(Math.round(life.synapseGain * 100)); text('gain-label', `${input('gain').value}%`); input('learn').checked = life.learning;
       lastDecision = -100; lastLifetimeCount = -1; lastMemoryCount = -1; prevDistance = NaN; save(); render(); text('status', 'Lineage imported — resume when ready');
     } catch (error) { text('save-state', `Import rejected: ${error instanceof Error ? error.message : String(error)}`); }
@@ -566,6 +606,19 @@ async function boot() {
   window.addEventListener('resize', () => { drawStrip(); drawLineage(); viewer.resize(); });
   if (fatal) return;
   ready = true; readyAt = performance.now(); lastDecision = -100;
+  if (!benchmark) {
+    const lineage = archiveId;
+    void readLifetimes(lineage).then(rows => { if (archiveId === lineage) { displayedHistory = rows; void updateHistory(); } }).catch(() => {});
+  }
+  button('older-generations').onclick = async () => {
+    const lineage = archiveId;
+    button('older-generations').disabled = true;
+    try {
+      const rows = await readLifetimes(lineage, displayedHistory[0]?.generation ?? Number.MAX_SAFE_INTEGER);
+      if (archiveId === lineage) { displayedHistory = [...rows, ...displayedHistory]; renderLifetimeHistory(el('generation-history'), displayedHistory); text('archive-count', `${displayedHistory.length} recorded generations`); el('older-generations').hidden = rows.length < 100 || (rows[0]?.generation ?? 1) <= 1; }
+    } catch { text('continuity-note', 'Older records could not be loaded from this browser.'); }
+    finally { button('older-generations').disabled = false; }
+  };
   life.remember(`Habitat connected: bilateral senses → ${brain.header.numNeurons.toLocaleString()}-neuron LIF → learned steering + goal readout → jointed body`);
   el('loading').hidden = true; document.body.classList.add('ready'); setRunning(true); render(); drawLineage();
   window.addEventListener('pagehide', save);

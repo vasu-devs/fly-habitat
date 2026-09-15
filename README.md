@@ -7,11 +7,13 @@ A fruit-fly connectome experiment in a 3D home: measured FlyWire wiring simulate
 ## Explore
 
 - Follow the fly as it finds food and water, rests, collects pollen, tends a nursery, lays eggs and dies.
-- Inspect all 139,255 neurons in a 3D brain map or pixel matrix, watch named descending neurons spike, and inspect population-level connectivity.
+- Watch the body and all 139,255 neurons side by side; inactive cells stay dim and simulated spikes light them up. Signals includes the pixel matrix and descending-neuron activity.
 - Give reinforcement, freeze learning, alter synaptic strength, pulse a neuron or disconnect it.
-- Compare lifetimes and export/import learned weights, wiring interventions and experience history.
+- Expand lifetime records for death causes, attempted tasks, outcomes, exposures, experiences and inherited weight changes. Older records are kept in a browser archive; checkpoint export/import includes the latest 100 generations.
 
 The app runs in the browser. Use a current Chrome or Edge with WebGPU and hardware acceleration. First load downloads scientific models totaling hundreds of megabytes; speed depends on your GPU. No API key or remote inference service is required.
+
+**Continuity:** this deployment still runs a separate lineage in each browser. Closing the tab stops simulation. A shared, continuously running server is planned but not connected; see [hosting assessment](HOSTING.md).
 
 ## Run locally
 

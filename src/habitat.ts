@@ -1,6 +1,7 @@
 import * as T from 'three';
 import { Room } from './room';
 import { PLACES, type Action, type Life } from './life';
+import { predatorAt } from './predator';
 
 /** Geometry-built miniature home. Anatomy comes exclusively from flybody. */
 export class Habitat {
@@ -13,6 +14,7 @@ export class Habitat {
   private points: T.Vector3[] = [];
   private ring: T.Mesh;
   private labels: T.Sprite[] = [];
+  private predator = new T.Group();
   onSelect: ((action: Action)=>void) | null = null;
   constructor(readonly room: Room) {
     this.root.scale.setScalar(6); room.scene.add(this.root);
@@ -88,6 +90,11 @@ export class Habitat {
     this.ring=mesh(new T.RingGeometry(.17,.174,48),new T.MeshBasicMaterial({color:'#f8efc5',side:T.DoubleSide,transparent:true,opacity:.85}),0,0,-.137);this.ring.rotation.x=-Math.PI/2;
     this.heat=box(.9,.62,-.136,.68,.64,.005,new T.MeshBasicMaterial({color:'#ee633b',transparent:true,opacity:.28}));this.heat.visible=false;
     this.trail=new T.Line(new T.BufferGeometry(),new T.LineBasicMaterial({color:'#d9b96c',transparent:true,opacity:.55}));this.root.add(this.trail);
+    // The footprint visualizes an authored predation hazard, not a biological predator mesh.
+    const danger = new T.Mesh(new T.RingGeometry(.30,.34,64),new T.MeshBasicMaterial({color:'#e06755',side:T.DoubleSide,transparent:true,opacity:.8}));
+    danger.rotation.x=-Math.PI/2; this.predator.add(danger);
+    const dangerLabel=this.label('PREDATOR FOOTPRINT','#e39182');dangerLabel.position.set(0,.12,-.36);this.predator.add(dangerLabel);
+    this.predator.visible=false;this.root.add(this.predator);
     // A visual scale bar, exactly one millimetre in model units.
     box(-1.36,-1.30,-.13,.1,.012,.006,mat('#3d5148'));
     const scaleLabel=this.label('1 MM','#344d42');scaleLabel.scale.set(.24,.05,1);scaleLabel.position.set(-1.36,-.12,1.36);this.root.add(scaleLabel);
@@ -112,7 +119,10 @@ export class Habitat {
     for (const marker of this.markers.values()) marker.visible = visible;
     this.room.requestRender();
   }
-  update(life:Life,x:number,y:number,heat:boolean,food:boolean) {
+  update(life:Life,x:number,y:number,heat:boolean,food:boolean,predators=false) {
+    const threat = predatorAt(life.state.age);
+    this.predator.visible = predators && life.state.alive && threat.active;
+    this.predator.position.set(threat.x,-.135,-threat.y);
     this.ring.position.set(x,-.137,-y);
     (this.ring.material as T.MeshBasicMaterial).color.set(life.state.alive ? '#fff4c4':'#ed7564');
     this.heat.visible=heat;this.food.visible=food;

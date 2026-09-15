@@ -5,7 +5,7 @@
 <header class="top">
   <a class="brand" href="#observation"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 8v16M12 13 6 6M20 13l6-7M12 20l-6 6M20 20l6 6" stroke="currentColor" stroke-width="1.5"/><ellipse cx="11" cy="15" rx="4" ry="8" transform="rotate(-30 11 15)" stroke="currentColor"/><ellipse cx="21" cy="15" rx="4" ry="8" transform="rotate(30 21 15)" stroke="currentColor"/></svg></span><span class="brand-text">FLY<span class="brand-divider"> / </span>HABITAT<small>Living systems laboratory</small></span></a>
 
-  <nav class="workspace-nav" aria-label="Workspace"><button data-view="observation" aria-controls="observation" aria-current="page">Observe</button><button data-view="signals" aria-controls="signals">Neural activity</button><button data-view="instruments" aria-controls="instruments">Experiment</button></nav>
+  <nav class="workspace-nav" aria-label="Workspace"><button data-view="observation" aria-controls="observation" aria-current="page">Observe</button><button data-view="signals" aria-controls="signals">Signals</button><button data-view="instruments" aria-controls="instruments">Experiment</button></nav>
   <div class="live"><i id="live-dot"></i><span id="status">Preparing habitat</span></div>
   <a class="header-link" href="/lab.html">Circuit lab</a>
   <button id="about" class="ghost">Model notes</button>
@@ -26,28 +26,9 @@
 
 
 </section>
-<aside class="ribbon" aria-label="Active individual">
-  <div class="sidebar-heading"><span>INDIVIDUAL</span><span>D. melanogaster</span></div>
-  <div class="identity"><h3>Subject <span id="generation">001</span></h3><span id="life-badge">loading</span><span id="age" class="mono">0 s</span></div>
-  <p id="action-description">Preparing the first lifetime.</p>
-  <div class="sub-label">Physiology <span>live state</span></div><div class="vitals" id="vitals"></div>
-  <div class="sub-label">Behaviour</div><div class="ribbon-controls">
-    <select id="task" aria-label="Assign a task" disabled><option value="auto">Autonomous life</option><option value="eat">Find fruit and eat</option><option value="drink">Find water and drink</option><option value="sleep">Rest in the refuge</option><option value="forage">Collect pollen</option><option value="nest">Deliver pollen / lay an egg</option><option value="explore">Explore the courtyard</option></select>
-    <label><input id="food" type="checkbox" checked> Food</label>
-    <label><input id="heat" type="checkbox"> Heat stress</label>
-  </div>
-<div class="side-note"><span>MODEL STATUS</span><p id="runtime-detail">Loading the measured brain and anatomical body.</p></div>  <nav class="clocks" aria-label="Simulation clocks">
-    <span><b id="clock-neural">0.000</b>neural s</span>
-    <span><b id="clock-physics">0.00</b>physics s</span>
-    <span><b id="clock-habitat">0</b>habitat s</span>
-    <span><b id="clock-cycle">—</b>ms / cycle</span>
-  </nav><div class="sidebar-foot"><span>139,255 neurons</span><span>15.1M synapses</span></div></aside>
-</div>
-<div class="workspace-view" id="signals" hidden>
-<div class="workspace-section-heading"><h2>Neural signals</h2><span>02 / Live activity</span></div>
   <section id="brain-pane" aria-label="Live 3D brain activity">
     <div id="brain-view"></div>
-    <div class="brain-heading"><span class="eyebrow">FlyWire v783 · live</span><h2><b id="activity">—</b><span>of 139,255 neurons spiking</span></h2><span class="fine" id="brain-window">10 ms window · 15,091,983 edges</span></div>
+    <div class="brain-heading"><span class="eyebrow">LIVE CONNECTOME · FLYWIRE V783</span><h2><b id="activity">—</b><span>of 139,255 neurons spiking</span></h2><span class="fine" id="brain-window">10 ms window · 15,091,983 edges</span><p class="activity-key"><i></i> Spiking now <span>·</span> Dim points are inactive</p></div>
     <ul class="legend" aria-label="Neuron classes">
       <li><i style="--c:#f2c14e"></i>Kenyon cells</li><li><i style="--c:#5fd6d6"></i>MBON</li><li><i style="--c:#7ad38a"></i>Projection</li><li><i style="--c:#f08a3e"></i>Olfactory receptor</li><li><i style="--c:#b48cf0"></i>Lateral horn</li><li><i style="--c:#ef5a5a"></i>Descending</li><li><i style="--c:#4fb3c9"></i>Optic</li><li><i style="--c:#7f96b8"></i>Central</li>
     </ul>
@@ -65,6 +46,27 @@
       <div class="inspector-actions"><button id="pulse-cell" disabled>Pulse 200 ms</button><button id="silence-cell" disabled>Disconnect</button><button disabled id="restore-wiring" class="ghost">Restore wiring</button><div id="top-neurons" class="top-neurons" aria-label="Most active neurons"></div></div>
     </details>
   </section>
+<aside class="ribbon" aria-label="Active individual">
+  <div class="sidebar-heading"><span>CURRENT GENERATION</span><span>D. melanogaster</span></div>
+  <div class="identity"><h3>Subject <span id="generation">001</span></h3><span id="life-badge">loading</span><span id="age" class="mono">0 s</span></div>
+  <p id="action-description">Preparing the first lifetime.</p>
+  <div class="sub-label">Physiology <span>live state</span></div><div class="vitals" id="vitals"></div>
+  <div class="sub-label">Behaviour</div><div class="ribbon-controls">
+    <select id="task" aria-label="Assign a task" disabled><option value="auto">Autonomous life</option><option value="eat">Find fruit and eat</option><option value="drink">Find water and drink</option><option value="sleep">Rest in the refuge</option><option value="forage">Collect pollen</option><option value="nest">Deliver pollen / lay an egg</option><option value="explore">Explore the courtyard</option></select>
+    <label><input id="food" type="checkbox" checked> Food</label>
+    <label><input id="heat" type="checkbox"> Heat stress</label><label><input id="predators" type="checkbox" checked> Predator pressure</label>
+  </div>
+<div class="side-note"><span>CONTINUITY</span><p id="runtime-detail">Loading the measured brain and anatomical body.</p></div>  <nav class="clocks" aria-label="Simulation clocks">
+    <span><b id="clock-neural">0.000</b>neural s</span>
+    <span><b id="clock-physics">0.00</b>physics s</span>
+    <span><b id="clock-habitat">0</b>habitat s</span>
+    <span><b id="clock-cycle">—</b>ms / cycle</span>
+  </nav><div class="sidebar-foot"><span>139,255 neurons</span><span>15.1M synapses</span></div></aside>
+</div>
+<section class="generation-section"><div class="workspace-section-heading"><h2>Lifetime archive</h2><span id="archive-count">No completed generations</span></div><p class="fine" id="continuity-note">Each death archives its outcome and both learners. Records are currently stored in this browser; a shared 24/7 host is not connected yet.</p><div id="generation-history"><p class="empty">The first lifetime is in progress. Its record will appear here when it ends.</p></div><button id="older-generations" hidden>Load earlier generations</button></section>
+<div class="workspace-view" id="signals" hidden>
+<div class="workspace-section-heading"><h2>Neural signals</h2><span>02 / Live activity</span></div>
+
 <section class="signals">
   <section class="panel strip-panel" aria-label="Live spike raster of named descending neurons and populations">
     <div class="section-label">Spike strip <span>named descending neurons · populations · 240 cycles</span></div>
@@ -149,6 +151,7 @@
 <p><b>Authored senses.</b> Each habitat zone emits an odor plume that decays with distance. Olfactory receptor neurons are split by hemisphere from their measured positions and assigned to five odor channels by index (the prepared data has no glomerulus labels). The antenna facing a source receives more drive. The rendered retina's left and right halves drive the left and right optic lobes.</p>
 <p><b>Real reinforcement learning, two learners.</b> Steering reads left−right activity asymmetries of six populations from the live brain and outputs a turn; it learns by REINFORCE from progress toward the goal. Goal choice is linear Q-learning over interoception, eight population rates and the sensed odor of each candidate. Innate need priorities, two reflexes (righting, escape) and a generation-decaying exploration rate coexist with what is learned. Rewards are algorithmic signals, not simulated dopamine.</p>
 <p><b>Body.</b> Turn and forward commands drive an authored tripod gait with velocity assistance. Navigation assist at 0% means the brain-derived turn alone steers; raising it blends in a coordinate bearing. This is not a measured brain-to-muscle mapping.</p>
+<p><b>Predator pressure.</b> A periodic moving danger footprint applies proximity-based damage. The refuge is safe. Exposure adds a negative learning reward; this is an authored hazard, not a reconstructed predator or a validated fear circuit.</p>
 <p><b>Life and inheritance.</b> Hunger, thirst, rest, health, fertility, pollen delivery, eggs and a 240-habitat-second lifespan are simplified rules. On death both learners and the journal are archived and inherited by the next adult (an egg if one exists). Descendants can improve or regress; the lineage panel reports what actually happened.</p>
 <p><b>Interventions.</b> Disconnecting a cell zeroes its incoming and outgoing edges on the GPU; the synaptic-strength slider scales every measured weight. Both persist in the lineage so damaged-brain generations can be compared with intact ones. "Live drive" in the connectome matrix is presynaptic rate × summed weight, an estimate, not a spike-resolved current.</p>
 <p class="fine">Sources: <a href="https://github.com/abgnydn/webgpu-fly" target="_blank" rel="noreferrer">webgpu-fly</a> · <a href="https://github.com/TuragaLab/flybody" target="_blank" rel="noreferrer">flybody</a> · <a href="https://codex.flywire.ai/" target="_blank" rel="noreferrer">FlyWire</a> · <a href="https://github.com/philshiu/Drosophila_brain_model" target="_blank" rel="noreferrer">Shiu et al. model</a>. Everything runs in this tab; no remote inference or hidden training service.</p></dialog>

@@ -14,6 +14,7 @@ export interface ViewerOpts {
   maxFps?: number;
   pointOpacity?: number;
   fitPortrait?: boolean;
+  inactiveScale?: number;
 }
 
 // Anatomy palette indexed by super_class enum (matches SUPER_CLASS_TABLE in
@@ -127,14 +128,15 @@ export class FlyViewer {
     // Per-neuron anatomy baseline: super_class palette, with hero cell_type
     // overrides on top. Activity later lerps from baseline → magma.
     this.baseColors = new Float32Array(N * 3);
+    const inactive = opts.inactiveScale ?? 1;
     for (let i = 0; i < N; i++) {
       const sc = brain.neurons.superClass[i];
       const base = CLASS_BASE[sc] ?? CLASS_BASE[0];
       const hero = brain.neurons.cellType[i] & 0xff;
       const c = HERO_BASE[hero] ?? base;
-      this.baseColors[3 * i]     = c[0];
-      this.baseColors[3 * i + 1] = c[1];
-      this.baseColors[3 * i + 2] = c[2];
+      this.baseColors[3 * i]     = c[0] * inactive;
+      this.baseColors[3 * i + 1] = c[1] * inactive;
+      this.baseColors[3 * i + 2] = c[2] * inactive;
     }
     const colors = this.baseColors.slice();
 

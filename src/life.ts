@@ -7,6 +7,7 @@
  *  - steering (src/steer.ts): REINFORCE over bilateral population asymmetries.
  */
 import { Steering } from './steer.ts';
+import { predationDamage } from './predator.ts';
 
 export const ACTIONS = ['eat', 'drink', 'sleep', 'forage', 'nest', 'explore'] as const;
 export type Action = typeof ACTIONS[number];
@@ -26,7 +27,12 @@ export const FEATURE_NAMES = ['bias', 'hunger', 'thirst', 'fatigue', 'injury', '
 export const LIFESPAN = 240;
 
 export interface Memory { generation: number; age: number; event: string }
-export interface Lifetime { generation: number; age: number; reward: number; meals: number; drinks: number; sleeps: number; tasks: number; eggs: number; cause: string; updates: number; steerUpdates: number; travelled: number; weights?: number[][]; steer?: number[] }
+export interface Episode {
+  startWeights: number[][]; startSteer: number[]; startSteerUpdates: number; startGoalUpdates: number; baselineKnown: boolean;
+  actionSeconds: number[]; encounters: number; predatorDamage: number; escapes: number; stuckRecoveries: number; falls: number;
+  heatSeconds: number; foodAbsentSeconds: number; predatorSeconds: number; assistedSeconds: number;
+}
+export interface Lifetime { generation: number; age: number; reward: number; meals: number; drinks: number; sleeps: number; tasks: number; eggs: number; cause: string; updates: number; steerUpdates: number; travelled: number; weights?: number[][]; steer?: number[]; episode?: Episode; events?: Memory[] }
 export interface Egg { id: number; parent: number; age: number }
 export interface LifeState {
   generation: number; age: number; fuel: number; water: number; rest: number; health: number;
@@ -38,16 +44,22 @@ export interface Checkpoint {
   state: LifeState; weights: number[][]; memories: Memory[]; lifetimes: Lifetime[]; eggs: Egg[];
   updates: number; totalSeconds: number; seed: number; synapseGain: number; learning: boolean;
   steer: ReturnType<Steering['checkpoint']>; lesions: number[];
+  episode?: Episode;
 }
 export const F = FEATURE_NAMES.length; // 16
 const clamp = (n: number, a = 0, b = 100) => Math.min(b, Math.max(a, n));
 const fresh = (generation: number): LifeState => ({ generation, age: 0, fuel: 62, water: 68, rest: 78, health: 100, fertility: 35, pollen: false, alive: true, deathAge: 0, action: 'eat', meals: 0, drinks: 0, sleeps: 0, tasks: 0, eggsLaid: 0, reward: 0, travelled: 0 });
 const finiteRow = (row: unknown, n: number, limit: number) => Array.isArray(row) && row.length === n && row.every(v => Number.isFinite(v) && Math.abs(v) <= limit);
+const freshEpisode = (weights: number[][], steering: Steering, updates = 0, baselineKnown = true): Episode => ({ startWeights: structuredClone(weights), startSteer: steering.weights.slice(), startSteerUpdates: steering.updates, startGoalUpdates: updates, baselineKnown, actionSeconds: ACTIONS.map(() => 0), encounters: 0, predatorDamage: 0, escapes: 0, stuckRecoveries: 0, falls: 0, heatSeconds: 0, foodAbsentSeconds: 0, predatorSeconds: 0, assistedSeconds: 0 });
+const validEpisode = (e: Episode) => e && typeof e.baselineKnown === 'boolean' && Array.isArray(e.startWeights) && e.startWeights.length === 6 && e.startWeights.every(row => finiteRow(row, F, 5)) && finiteRow(e.startSteer, 7, 4) && finiteRow(e.actionSeconds, 6, 1e9) && e.actionSeconds.every(n => n >= 0) && ['startSteerUpdates', 'startGoalUpdates', 'encounters', 'predatorDamage', 'escapes', 'stuckRecoveries', 'falls', 'heatSeconds', 'foodAbsentSeconds', 'predatorSeconds', 'assistedSeconds'].every(k => Number.isFinite(e[k as keyof Episode]) && Number(e[k as keyof Episode]) >= 0);
+const validMemory = (m: Memory) => m && typeof m.event === 'string' && m.event.length <= 1000 && Number.isFinite(m.age) && Number.isInteger(m.generation);
 
 export class Life {
   state = fresh(1);
   weights = ACTIONS.map(() => Array<number>(F).fill(0));
   steering = new Steering();
+  episode = freshEpisode(this.weights, this.steering);
+  private inPredatorContact = false;
   /** Neuron indices whose wiring is disconnected on the GPU. An experimental intervention, inherited. */
   lesions: number[] = [];
   memories: Memory[] = [];
@@ -97,9 +109,13 @@ export class Life {
     const scores = features.map((f, i) => this.q(i, f) + priors[i]);
     this.lastScores = scores;
     let a = forced ? ACTIONS.indexOf(forced) : scores.indexOf(Math.max(...scores));
-    if (!forced && this.random() < this.epsilon) a = Math.floor(this.random() * ACTIONS.length);
+    const exploring = !forced && this.random() < this.epsilon;
+    if (exploring) a = Math.floor(this.random() * ACTIONS.length);
     this.lastFeatures = features[a]; this.lastAction = a;
-    if (s.action !== ACTIONS[a]) { this.interaction = 0; this.lastPlace = null; }
+    if (s.action !== ACTIONS[a]) {
+      this.interaction = 0; this.lastPlace = null;
+      this.remember(`Goal → ${PLACES[a].name}; ${forced ? 'visitor assigned' : exploring ? 'exploration' : 'learned value + innate need'} (Q ${this.q(a, features[a]).toFixed(2)}, need ${priors[a].toFixed(2)})`);
+    }
     s.action = ACTIONS[a];
     return s.action;
   }
@@ -119,7 +135,7 @@ export class Life {
     this.reward(value);
     this.remember(`${value > 0 ? 'Positive' : 'Negative'} reinforcement: ${this.state.action}`);
   }
-  step(dt: number, x: number, y: number, neuralActive: boolean, foodAvailable = true, heat = false) {
+  step(dt: number, x: number, y: number, neuralActive: boolean, foodAvailable = true, heat = false, predators = false) {
     if (!Number.isFinite(dt) || dt <= 0 || dt > 1) throw Error('Life step must be in (0,1]');
     const s = this.state;
     this.totalSeconds += dt;
@@ -128,6 +144,10 @@ export class Life {
     if (Number.isFinite(this.lastX)) s.travelled += Math.hypot(x - this.lastX, y - this.lastY);
     this.lastX = x; this.lastY = y;
     s.age += dt; this.eggCooldown = Math.max(0, this.eggCooldown - dt);
+    this.episode.actionSeconds[ACTIONS.indexOf(s.action)] += dt;
+    if (heat) this.episode.heatSeconds += dt;
+    if (!foodAvailable) this.episode.foodAbsentSeconds += dt;
+    if (predators) this.episode.predatorSeconds += dt;
     const p = PLACES.find(p => p.id === s.action)!;
     const arrived = Math.hypot(p.x - x, p.y - y) <= p.radius;
     const acting = arrived && neuralActive;
@@ -138,6 +158,16 @@ export class Life {
     if (s.fuel > 60 && s.water > 60 && s.rest > 40) s.fertility = clamp(s.fertility + dt * .8);
     let damage = (s.fuel === 0 ? 4 : 0) + (s.water === 0 ? 5 : 0) + (s.rest === 0 ? 1 : 0);
     if (heat && x > .4 && y > .15) damage += 8;
+    const attack = predators ? predationDamage(s.age, x, y) : 0;
+    if (attack > 0) {
+      if (!this.inPredatorContact) { this.episode.encounters++; this.remember('Entered the predator footprint; taking damage'); }
+      this.episode.predatorDamage += attack * dt;
+      this.reward(-attack * dt / 40);
+    } else if (this.inPredatorContact) {
+      this.episode.escapes++; this.remember('Left the predator footprint alive');
+    }
+    this.inPredatorContact = attack > 0;
+    damage += attack;
     s.health = clamp(s.health + dt * (damage ? -damage : s.fuel > 40 && s.water > 40 ? .4 : 0));
     if (acting) {
       if (this.lastPlace !== s.action) { this.interaction = 0; this.lastPlace = s.action; }
@@ -161,7 +191,7 @@ export class Life {
         }
       }
     } else { this.interaction = 0; this.lastPlace = null; this.reward(-dt * .008); }
-    if (s.health === 0) this.die(heat && x > .4 && y > .15 ? 'heat exposure' : s.water === 0 ? 'dehydration' : s.fuel === 0 ? 'starvation' : 'exhaustion');
+    if (s.health === 0) this.die(attack ? 'predation' : heat && x > .4 && y > .15 ? 'heat exposure' : s.water === 0 ? 'dehydration' : s.fuel === 0 ? 'starvation' : 'exhaustion');
     else if (s.age >= LIFESPAN) this.die('simulated lifespan');
   }
   die(cause: string) {
@@ -170,7 +200,7 @@ export class Life {
     this.steering.detach();
     s.alive = false; s.health = 0; s.deathAge = 0;
     this.remember(`Died: ${cause}. Learned weights and experiences archived.`);
-    this.lifetimes.push({ generation: s.generation, age: s.age, reward: s.reward, meals: s.meals, drinks: s.drinks, sleeps: s.sleeps, tasks: s.tasks, eggs: s.eggsLaid, cause, updates: this.generationUpdates, steerUpdates: this.steering.updates, travelled: s.travelled, weights: structuredClone(this.weights), steer: this.steering.weights.slice() });
+    this.lifetimes.push({ generation: s.generation, age: s.age, reward: s.reward, meals: s.meals, drinks: s.drinks, sleeps: s.sleeps, tasks: s.tasks, eggs: s.eggsLaid, cause, updates: this.episode.baselineKnown ? this.updates - this.episode.startGoalUpdates : this.generationUpdates, steerUpdates: this.steering.updates, travelled: s.travelled, weights: structuredClone(this.weights), steer: this.steering.weights.slice(), episode: structuredClone(this.episode), events: structuredClone(this.memories.filter(m => m.generation === s.generation).slice(-60)) });
     if (this.lifetimes.length > 100) this.lifetimes.shift();
   }
   hatch() {
@@ -179,6 +209,7 @@ export class Life {
     this.state = fresh(this.state.generation + 1);
     this.lastFeatures = null; this.pendingReward = 0; this.interaction = 0; this.lastPlace = null; this.generationUpdates = 0; this.lastX = NaN; this.lastY = NaN;
     this.steering.detach();
+    this.episode = freshEpisode(this.weights, this.steering, this.updates); this.inPredatorContact = false;
     this.remember(egg ? `Hatched egg from generation ${egg.parent}; inherited latest lineage weights and memories` : 'Experiment reseeded a descendant with inherited weights and memories (no egg)');
     return true;
   }
@@ -191,7 +222,7 @@ export class Life {
     return { lifetimes: l.length, early: { reward: avg(early, 'reward'), tasks: avg(early, 'tasks'), age: avg(early, 'age') }, late: { reward: avg(late, 'reward'), tasks: avg(late, 'tasks'), age: avg(late, 'age') } };
   }
   checkpoint(): Checkpoint {
-    return structuredClone({ version: 2 as const, dataset: 'flywire-6419c41e66e2' as const, model: 'habitat-readout-v2' as const, state: this.state, weights: this.weights, memories: this.memories, lifetimes: this.lifetimes, eggs: this.eggs, updates: this.updates, totalSeconds: this.totalSeconds, seed: this.seed, synapseGain: this.synapseGain, learning: this.learning, steer: this.steering.checkpoint(), lesions: this.lesions });
+    return structuredClone({ version: 2 as const, dataset: 'flywire-6419c41e66e2' as const, model: 'habitat-readout-v2' as const, state: this.state, weights: this.weights, memories: this.memories, lifetimes: this.lifetimes, eggs: this.eggs, updates: this.updates, totalSeconds: this.totalSeconds, seed: this.seed, synapseGain: this.synapseGain, learning: this.learning, steer: this.steering.checkpoint(), lesions: this.lesions, episode: this.episode });
   }
   /** Accepts the current format and migrates version-1 lineages (12-feature readout, no steering). */
   restore(value: unknown, maxNeuron = 139255) {
@@ -214,6 +245,7 @@ export class Life {
     if (!Array.isArray(c.memories) || c.memories.length > 500 || c.memories.some(m => !m || typeof m.event !== 'string' || m.event.length > 1000 || !Number.isFinite(m.age) || !Number.isInteger(m.generation))) throw Error('Invalid journal');
     if (!Array.isArray(c.lifetimes) || c.lifetimes.length > 100 || c.lifetimes.some(l => !l || typeof l.cause !== 'string' || ['generation', 'age', 'reward', 'meals', 'drinks', 'sleeps', 'tasks', 'eggs', 'updates', 'steerUpdates', 'travelled'].some(k => !Number.isFinite(l[k as keyof Lifetime])) || (l.weights !== undefined && (!Array.isArray(l.weights) || l.weights.length !== 6 || l.weights.some(row => !finiteRow(row, F, 5)))) || (l.steer !== undefined && !finiteRow(l.steer, 7, 4)))) throw Error('Invalid lineage archive');
     if (!Array.isArray(c.eggs) || c.eggs.length > 8 || c.eggs.some(e => !e || !Number.isFinite(e.id) || !Number.isFinite(e.age) || !Number.isInteger(e.parent))) throw Error('Invalid nursery');
+    if ((c.episode && !validEpisode(c.episode)) || c.lifetimes.some(l => (l.episode && !validEpisode(l.episode)) || (l.events && (!Array.isArray(l.events) || l.events.length > 60 || !l.events.every(validMemory))))) throw Error('Invalid lifetime record');
     if (!Number.isInteger(c.updates) || c.updates < 0 || !Number.isFinite(c.totalSeconds) || c.totalSeconds < 0 || !Number.isInteger(c.seed) || !Number.isFinite(c.synapseGain) || c.synapseGain < 0 || c.synapseGain > 1 || typeof c.learning !== 'boolean') throw Error('Invalid checkpoint settings');
     if (!Array.isArray(c.lesions) || c.lesions.length > 5000 || c.lesions.some(i => !Number.isInteger(i) || i < 0 || i >= maxNeuron)) throw Error('Invalid lesion list');
     const steering = new Steering(); steering.restore(c.steer);
@@ -221,6 +253,7 @@ export class Life {
     this.state = copy.state; this.weights = copy.weights; this.memories = copy.memories; this.lifetimes = copy.lifetimes; this.eggs = copy.eggs;
     this.updates = copy.updates; this.totalSeconds = copy.totalSeconds; this.seed = copy.seed; this.synapseGain = copy.synapseGain; this.learning = copy.learning;
     this.lesions = [...new Set(copy.lesions)]; this.steering = steering; this.steering.learning = this.learning;
+    this.episode = copy.episode ?? freshEpisode(this.weights, this.steering, this.updates, false); this.inPredatorContact = false;
     this.lastFeatures = null; this.pendingReward = 0; this.interaction = 0; this.lastPlace = null; this.lastX = NaN; this.lastY = NaN;
   }
 }

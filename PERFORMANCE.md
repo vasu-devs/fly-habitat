@@ -8,9 +8,15 @@ The habitat now owns MuJoCo inside a dedicated module worker. Loading the MJB, i
 
 In a local 1280 × 720 Chromium run on the same Intel gen-12lp laptop, the longest recorded main-thread startup task was **461 ms**; the 30-cycle run recorded **no main-thread long tasks (over 50 ms)**. Navigation and model notes responded during body initialization. Startup still took tens of seconds. Wall-clock cycles averaged **488 ms** in that run (brain 160 ms, body/worker/retina 322 ms); this is a responsiveness improvement, not a further throughput win over the earlier 358 ms result. Another worker run measured 384 ms. System scheduling and the larger observation canvas affect these timings; neither run supports a real-time simulation claim.
 
-The interface uses separate Observe, Neural activity and Experiment views. Hidden views stop visual rendering while the same neural loop keeps running. The full anatomy fills the observation canvas, accompanied by a single physiology/task sidebar. Materials use neutral lighting and slate surfaces; the flybody meshes and their anatomical colours are retained.
+Observe pairs the anatomical body and neural activity in equal-width canvases, with physiology controls and expandable lifetime records below. Signals and Experiment contain additional instruments. Hidden instruments stop visual rendering while the same neural loop keeps running. Materials use neutral lighting and slate surfaces; the flybody meshes and their anatomical colours are retained. The timings above precede the paired-layout change.
 
 Cache reads, downloads, worker commands and GPU waits now have bounded failure paths. Boot errors do not replace an existing saved lineage with a fresh default. Errors expose a reload action that preserves the saved lineage. The worker is terminated on fatal errors.
+
+## CPU hosting feasibility, September 16
+
+The existing Rust `tools/cpu-bench` implementation was built in release mode with locked dependencies and run against `public/brain.bin` with `RAYON_NUM_THREADS=2`. It loaded 139,255 neurons and 15,091,983 edges, warmed up for 200 steps, then measured ten batches of 200 steps. The 2,000 measured steps took 26,503.4 ms: **13.2517 ms per neural step**, approximately **132.5 ms per 10-step window**. Batch median was 2,667.90 ms, p95 3,213.05 ms, and minimum 1,806.94 ms. Loading took 74 ms.
+
+This is a laptop CPU feasibility test using sparse stimulation of 1% of neurons. It excludes body physics, retinal rendering, networking and persistence. It is not a sustained VPS benchmark, full-system equivalence check or real-time claim. The benchmark is not yet an integrated server backend. See `HOSTING.md` for the deployment boundary.
 
 ## Earlier September 2026 throughput measurements
 

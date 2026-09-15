@@ -4,6 +4,7 @@ const controls = [...document.querySelectorAll<HTMLButtonElement>('[data-view]')
 function showView(id: string) {
   if (!controls.some(button => button.dataset.view === id)) id = 'observation';
   for (const panel of document.querySelectorAll<HTMLElement>('.workspace-view')) panel.hidden = panel.id !== id;
+  document.querySelector<HTMLElement>('.generation-section')!.hidden = id !== 'observation';
   for (const button of controls) {
     if (button.dataset.view === id) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');

@@ -2,7 +2,11 @@
 
 Public deployment uses this project's own versioned model release and serves assets on the same origin. See [PUBLISHING.md](PUBLISHING.md) for the current Vercel workflow; the external-bucket instructions below remain an alternative deployment option.
 
-`/world.html` is the living-connectome habitat: a measured FlyWire brain simulated on WebGPU, an anatomical flybody in MuJoCo, and a small house where the fly eats, drinks, sleeps, forages, lays eggs, dies, and passes what it learned to the next generation. `/lab.html` is the circuit laboratory (single-cell interventions, MANC nerve-cord bridge). `/research.html` preserves the upstream overview.
+`/` opens the living-connectome habitat directly (`/world.html` redirects here): a measured FlyWire brain simulated on WebGPU, an anatomical flybody in MuJoCo, and a small house where the fly eats, drinks, sleeps, forages, lays eggs, dies, and passes what it learned to the next generation. `/lab.html` is the circuit laboratory (single-cell interventions, MANC nerve-cord bridge). `/research.html` preserves the upstream overview.
+
+Observe shows the body and brain side by side on desktop, stacked on smaller screens. Neurons with no spikes in the captured neural window are dimmed; active cells use their simulated rates. The lifetime archive below records attempted goals, completed actions, death causes, exposures, recorded experiences and actual inherited weight changes. Predator pressure is an authored moving danger footprint with a refuge exemption, not a reconstructed predator. Its damage and negative reinforcement are recorded.
+
+This release remains browser-local. It stops when the tab closes; a shared 24/7 host is not connected. See [HOSTING.md](HOSTING.md) for the CPU feasibility result and proposed hosting split.
 
 ## Run
 
@@ -35,7 +39,7 @@ Clocks are reported separately: neural milliseconds, physics seconds, habitat se
 
 ## Deploy (Vercel or any static host)
 
-The heavy binaries cannot ship in a static deployment (brain 126 MB, body bundle 140 MB, compiled habitat 78 MB). `npm run build:vercel` builds and then strips them (`tools/slim-dist.mjs`), leaving ~9 MB. At runtime the page reads their locations from environment variables baked in at build time:
+The current Vercel deployment downloads the versioned binaries at build time, verifies them and serves them from the same origin. Alternatively, a host with tighter file limits can use `npm run build:slim` and an external asset bucket. The page supports these locations baked in at build time:
 
 | Variable | Asset | Behaviour if unset |
 |---|---|---|
@@ -65,7 +69,7 @@ Rehearsal without Vercel: build with the variables set, then `PORT=4180 npm run 
 - **Learning**: last reward, steering advantage, goal values (Q + innate need), steering weights, manual ± reinforcement, learning freeze, navigation assist, synaptic strength (scales every measured weight), neural window.
 - **Lineage** and **journal**: per-lifetime bars (reward) and line (deliveries), rows with cause of death, age, distance walked; the experience log.
 
-Checkpoints autosave to local storage every few habitat seconds and on page hide, survive refresh, and export/import as JSON. Version-1 lineages from the earlier build are migrated (interoceptive weights kept, neural weights reset).
+Checkpoints autosave to local storage every few habitat seconds and on page hide, survive refresh, and export/import as JSON (latest 100 generations). Completed generations are also written to a separate IndexedDB archive and older pages can be loaded on demand. Browser storage can be cleared or evicted; this is not server persistence. Version-1 lineages from the earlier build are migrated (interoceptive weights kept, neural weights reset).
 
 ## Kernel notes
 
